@@ -1,13 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { api, setToken, getToken } from './api.js';
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { api, setToken, getToken } from "./api.js";
 
-const PLATFORM_NAME = 'منصة التعليم الالكتروني بطب الأسرة و المجتمع';
+const PLATFORM_NAME = "منصة التعليم الالكتروني بطب الأسرة و المجتمع";
+const COPYRIGHT = "© Dr.sharifi.edu";
 
-const ROLE_LABELS = { trainee: 'متدرب', lecturer: 'محاضر', admin: 'مشرف' };
-const STATUS_LABELS = { draft: 'مسودة', approved: 'معتمدة' };
-const USER_STATUS_LABELS = { pending: 'بانتظار الموافقة', approved: 'مفعّل', rejected: 'مرفوض' };
+const ROLE_LABELS = { trainee: "متدرب", lecturer: "محاضر", admin: "مشرف" };
+const STATUS_LABELS = { draft: "مسودة", approved: "معتمدة" };
+const USER_STATUS_LABELS = {
+  pending: "بانتظار الموافقة",
+  approved: "مفعّل",
+  rejected: "مرفوض",
+};
 
-function Badge({ children, tone = 'default' }) {
+function Badge({ children, tone = "default" }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
@@ -25,22 +30,70 @@ function SuccessBox({ message }) {
   return <div className="success-box">{message}</div>;
 }
 
+function CopyrightMark({ className = "" }) {
+  return <div className={`copyright-mark ${className}`}>{COPYRIGHT}</div>;
+}
+
+/* ---------------- date helpers ---------------- */
+
+function fmtDate(s) {
+  if (!s) return "-";
+  try {
+    const d = new Date(String(s).replace(" ", "T") + "Z");
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString("ar-SA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch (e) {
+    return s;
+  }
+}
+function fmtDateTime(s) {
+  if (!s) return "-";
+  try {
+    const d = new Date(String(s).replace(" ", "T") + "Z");
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleString("ar-SA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch (e) {
+    return s;
+  }
+}
+
 /* ---------------- Auth ---------------- */
 
 function AuthPage({ onLoggedIn }) {
-  const [mode, setMode] = useState('login'); // login | signup
+  const [mode, setMode] = useState("login"); // login | signup
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [loginForm, setLoginForm] = useState({ username: '', password: '', keepSignedIn: true });
+  const [loginForm, setLoginForm] = useState({
+    username: "",
+    password: "",
+    keepSignedIn: true,
+  });
   const [signupForm, setSignupForm] = useState({
-    name: '', username: '', password: '', department: '', specialty: '', job_title: '',
+    name: "",
+    username: "",
+    password: "",
+    department: "",
+    specialty: "",
+    job_title: "",
   });
 
   async function handleLogin(e) {
     e.preventDefault();
-    setError(''); setSuccess(''); setLoading(true);
+    setError("");
+    setSuccess("");
+    setLoading(true);
     try {
       const data = await api.login(loginForm);
       setToken(data.token);
@@ -54,11 +107,13 @@ function AuthPage({ onLoggedIn }) {
 
   async function handleSignup(e) {
     e.preventDefault();
-    setError(''); setSuccess(''); setLoading(true);
+    setError("");
+    setSuccess("");
+    setLoading(true);
     try {
       const data = await api.signup(signupForm);
       setSuccess(data.message);
-      setMode('login');
+      setMode("login");
       setLoginForm((f) => ({ ...f, username: signupForm.username }));
     } catch (err) {
       setError(err.message);
@@ -73,10 +128,24 @@ function AuthPage({ onLoggedIn }) {
         <div className="auth-logo">🎓</div>
         <h1 className="auth-title">{PLATFORM_NAME}</h1>
         <div className="auth-tabs">
-          <button className={mode === 'login' ? 'tab active' : 'tab'} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>
+          <button
+            className={mode === "login" ? "tab active" : "tab"}
+            onClick={() => {
+              setMode("login");
+              setError("");
+              setSuccess("");
+            }}
+          >
             تسجيل الدخول
           </button>
-          <button className={mode === 'signup' ? 'tab active' : 'tab'} onClick={() => { setMode('signup'); setError(''); setSuccess(''); }}>
+          <button
+            className={mode === "signup" ? "tab active" : "tab"}
+            onClick={() => {
+              setMode("signup");
+              setError("");
+              setSuccess("");
+            }}
+          >
             حساب جديد
           </button>
         </div>
@@ -84,44 +153,120 @@ function AuthPage({ onLoggedIn }) {
         <ErrorBox message={error} />
         <SuccessBox message={success} />
 
-        {mode === 'login' ? (
+        {mode === "login" ? (
           <form onSubmit={handleLogin} className="form">
-            <label>اسم المستخدم
-              <input required value={loginForm.username} onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })} />
+            <label>
+              اسم المستخدم
+              <input
+                required
+                value={loginForm.username}
+                onChange={(e) =>
+                  setLoginForm({ ...loginForm, username: e.target.value })
+                }
+              />
             </label>
-            <label>كلمة المرور
-              <input required type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} />
+            <label>
+              كلمة المرور
+              <input
+                required
+                type="password"
+                value={loginForm.password}
+                onChange={(e) =>
+                  setLoginForm({ ...loginForm, password: e.target.value })
+                }
+              />
             </label>
             <label className="checkbox-row">
-              <input type="checkbox" checked={loginForm.keepSignedIn} onChange={(e) => setLoginForm({ ...loginForm, keepSignedIn: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={loginForm.keepSignedIn}
+                onChange={(e) =>
+                  setLoginForm({ ...loginForm, keepSignedIn: e.target.checked })
+                }
+              />
               إبقائي مسجّل الدخول
             </label>
-            <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'دخول'}</button>
+            <button
+              className="btn btn-primary"
+              disabled={loading}
+              type="submit"
+            >
+              {loading ? <Spinner /> : "دخول"}
+            </button>
           </form>
         ) : (
           <form onSubmit={handleSignup} className="form">
-            <label>الاسم الكامل
-              <input required value={signupForm.name} onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })} />
+            <label>
+              الاسم الكامل
+              <input
+                required
+                value={signupForm.name}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, name: e.target.value })
+                }
+              />
             </label>
-            <label>اسم المستخدم
-              <input required value={signupForm.username} onChange={(e) => setSignupForm({ ...signupForm, username: e.target.value })} />
+            <label>
+              اسم المستخدم
+              <input
+                required
+                value={signupForm.username}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, username: e.target.value })
+                }
+              />
             </label>
-            <label>كلمة المرور
-              <input required type="password" value={signupForm.password} onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })} />
+            <label>
+              كلمة المرور
+              <input
+                required
+                type="password"
+                value={signupForm.password}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, password: e.target.value })
+                }
+              />
             </label>
-            <label>القسم / الجهة
-              <input value={signupForm.department} onChange={(e) => setSignupForm({ ...signupForm, department: e.target.value })} />
+            <label>
+              القسم / الجهة
+              <input
+                value={signupForm.department}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, department: e.target.value })
+                }
+              />
             </label>
-            <label>التخصص
-              <input value={signupForm.specialty} onChange={(e) => setSignupForm({ ...signupForm, specialty: e.target.value })} />
+            <label>
+              التخصص
+              <input
+                value={signupForm.specialty}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, specialty: e.target.value })
+                }
+              />
             </label>
-            <label>المسمى الوظيفي
-              <input value={signupForm.job_title} onChange={(e) => setSignupForm({ ...signupForm, job_title: e.target.value })} />
+            <label>
+              المسمى الوظيفي
+              <input
+                value={signupForm.job_title}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, job_title: e.target.value })
+                }
+              />
             </label>
-            <p className="hint">سيتم إنشاء حسابك كمتدرب، وينتظر موافقة المشرف قبل تفعيله.</p>
-            <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'إنشاء الحساب'}</button>
+            <p className="hint">
+              سيتم إنشاء حسابك كمتدرب، وينتظر موافقة المشرف قبل تفعيله.
+            </p>
+            <button
+              className="btn btn-primary"
+              disabled={loading}
+              type="submit"
+            >
+              {loading ? <Spinner /> : "إنشاء الحساب"}
+            </button>
           </form>
         )}
+        <CopyrightMark className="auth-copyright" />
       </div>
     </div>
   );
@@ -131,23 +276,28 @@ function AuthPage({ onLoggedIn }) {
 
 function ProfilePage({ user, onUpdated }) {
   const [form, setForm] = useState({
-    name: user.name || '', password: '', department: user.department || '',
-    specialty: user.specialty || '', job_title: user.job_title || '',
+    name: user.name || "",
+    password: "",
+    department: user.department || "",
+    specialty: user.specialty || "",
+    job_title: user.job_title || "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true); setError(''); setSuccess('');
+    setLoading(true);
+    setError("");
+    setSuccess("");
     try {
       const payload = { ...form };
       if (!payload.password) delete payload.password;
       const data = await api.updateProfile(payload);
       onUpdated(data.user);
-      setSuccess('تم حفظ التعديلات بنجاح.');
-      setForm((f) => ({ ...f, password: '' }));
+      setSuccess("تم حفظ التعديلات بنجاح.");
+      setForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -161,23 +311,47 @@ function ProfilePage({ user, onUpdated }) {
       <ErrorBox message={error} />
       <SuccessBox message={success} />
       <form className="form form-grid" onSubmit={handleSubmit}>
-        <label>الاسم الكامل
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <label>
+          الاسم الكامل
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
         </label>
-        <label>كلمة مرور جديدة (اختياري)
-          <input type="password" placeholder="اتركه فارغاً لعدم التغيير" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <label>
+          كلمة مرور جديدة (اختياري)
+          <input
+            type="password"
+            placeholder="اتركه فارغاً لعدم التغيير"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
         </label>
-        <label>القسم / الجهة
-          <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+        <label>
+          القسم / الجهة
+          <input
+            value={form.department}
+            onChange={(e) => setForm({ ...form, department: e.target.value })}
+          />
         </label>
-        <label>التخصص
-          <input value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })} />
+        <label>
+          التخصص
+          <input
+            value={form.specialty}
+            onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+          />
         </label>
-        <label>المسمى الوظيفي
-          <input value={form.job_title} onChange={(e) => setForm({ ...form, job_title: e.target.value })} />
+        <label>
+          المسمى الوظيفي
+          <input
+            value={form.job_title}
+            onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+          />
         </label>
         <div className="form-actions">
-          <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'حفظ'}</button>
+          <button className="btn btn-primary" disabled={loading} type="submit">
+            {loading ? <Spinner /> : "حفظ"}
+          </button>
         </div>
       </form>
     </div>
@@ -189,19 +363,22 @@ function ProfilePage({ user, onUpdated }) {
 function LectureForm({ programs, initial, onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     id: initial?.id,
-    title: initial?.title || '',
-    description: initial?.description || '',
-    program_id: initial?.program_id || (programs[0]?.id ?? ''),
-    topic: initial?.topic || '',
-    video_url: initial?.video_url || '',
-    slides_url: initial?.slides_url || '',
+    title: initial?.title || "",
+    description: initial?.description || "",
+    program_id: initial?.program_id || (programs[0]?.id ?? ""),
+    topic: initial?.topic || "",
+    video_url: initial?.video_url || "",
+    slides_url: initial?.slides_url || "",
     extra_links: initial?.extra_links?.length ? initial.extra_links : [],
   }));
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   function addLink() {
-    setForm((f) => ({ ...f, extra_links: [...f.extra_links, { label: '', url: '' }] }));
+    setForm((f) => ({
+      ...f,
+      extra_links: [...f.extra_links, { label: "", url: "" }],
+    }));
   }
   function updateLink(idx, key, value) {
     setForm((f) => {
@@ -211,12 +388,16 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     });
   }
   function removeLink(idx) {
-    setForm((f) => ({ ...f, extra_links: f.extra_links.filter((_, i) => i !== idx) }));
+    setForm((f) => ({
+      ...f,
+      extra_links: f.extra_links.filter((_, i) => i !== idx),
+    }));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       if (form.id) {
         await api.updateLecture(form);
@@ -234,48 +415,102 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
   return (
     <form className="form form-grid" onSubmit={handleSubmit}>
       <ErrorBox message={error} />
-      <label>عنوان المحاضرة
-        <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+      <label>
+        عنوان المحاضرة
+        <input
+          required
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+        />
       </label>
-      <label>البرنامج التدريبي
-        <select value={form.program_id} onChange={(e) => setForm({ ...form, program_id: e.target.value })}>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      <label>
+        البرنامج التدريبي
+        <select
+          value={form.program_id}
+          onChange={(e) => setForm({ ...form, program_id: e.target.value })}
+        >
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
         </select>
       </label>
-      <label>الموضوع / المحور
-        <input value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} />
+      <label>
+        الموضوع / المحور
+        <input
+          value={form.topic}
+          onChange={(e) => setForm({ ...form, topic: e.target.value })}
+        />
       </label>
-      <label className="full">الوصف
-        <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      <label className="full">
+        الوصف
+        <textarea
+          rows={3}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
       </label>
-      <label>رابط الفيديو (يوتيوب أو غيره)
-        <input value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} placeholder="https://..." />
+      <label>
+        رابط الفيديو (يوتيوب أو غيره)
+        <input
+          value={form.video_url}
+          onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+          placeholder="https://..."
+        />
       </label>
-      <label>رابط الشرائح (PDF / PowerPoint)
-        <input value={form.slides_url} onChange={(e) => setForm({ ...form, slides_url: e.target.value })} placeholder="https://..." />
+      <label>
+        رابط الشرائح (PDF / PowerPoint)
+        <input
+          value={form.slides_url}
+          onChange={(e) => setForm({ ...form, slides_url: e.target.value })}
+          placeholder="https://..."
+        />
       </label>
 
       <div className="full">
         <div className="links-header">
           <span>روابط إضافية</span>
-          <button type="button" className="btn btn-small" onClick={addLink}>+ إضافة رابط</button>
+          <button type="button" className="btn btn-small" onClick={addLink}>
+            + إضافة رابط
+          </button>
         </div>
         {form.extra_links.map((link, idx) => (
           <div className="link-row" key={idx}>
-            <input placeholder="عنوان الرابط" value={link.label} onChange={(e) => updateLink(idx, 'label', e.target.value)} />
-            <input placeholder="https://..." value={link.url} onChange={(e) => updateLink(idx, 'url', e.target.value)} />
-            <button type="button" className="btn btn-danger btn-small" onClick={() => removeLink(idx)}>حذف</button>
+            <input
+              placeholder="عنوان الرابط"
+              value={link.label}
+              onChange={(e) => updateLink(idx, "label", e.target.value)}
+            />
+            <input
+              placeholder="https://..."
+              value={link.url}
+              onChange={(e) => updateLink(idx, "url", e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn-danger btn-small"
+              onClick={() => removeLink(idx)}
+            >
+              حذف
+            </button>
           </div>
         ))}
       </div>
 
       <p className="hint full">
-        {form.id ? 'حفظ التعديل سيعيد المحاضرة إلى حالة "مسودة" لمراجعتها من جديد (إلا إذا كنت مشرفاً).' : 'ستُحفظ المحاضرة كمسودة بانتظار اعتماد المشرف.'}
+        {form.id
+          ? 'حفظ التعديل سيعيد المحاضرة إلى حالة "مسودة" لمراجعتها من جديد (إلا إذا كنت مشرفاً).'
+          : "ستُحفظ المحاضرة كمسودة بانتظار اعتماد المشرف."}
       </p>
 
       <div className="form-actions full">
-        <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'حفظ'}</button>
-        <button className="btn" type="button" onClick={onCancel}>إلغاء</button>
+        <button className="btn btn-primary" disabled={loading} type="submit">
+          {loading ? <Spinner /> : "حفظ"}
+        </button>
+        <button className="btn" type="button" onClick={onCancel}>
+          إلغاء
+        </button>
       </div>
     </form>
   );
@@ -284,50 +519,89 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
 /* ---------------- Quiz form (create) ---------------- */
 
 function QuizForm({ lectureId, onSaved, onCancel }) {
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
   const [passScore, setPassScore] = useState(60);
   const [allowRetake, setAllowRetake] = useState(true);
   const [questions, setQuestions] = useState([
-    { question_text: '', type: 'single', options: [{ text: '', correct: false }, { text: '', correct: false }] },
+    {
+      question_text: "",
+      type: "single",
+      options: [
+        { text: "", correct: false },
+        { text: "", correct: false },
+      ],
+    },
   ]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   function addQuestion() {
-    setQuestions((qs) => [...qs, { question_text: '', type: 'single', options: [{ text: '', correct: false }, { text: '', correct: false }] }]);
+    setQuestions((qs) => [
+      ...qs,
+      {
+        question_text: "",
+        type: "single",
+        options: [
+          { text: "", correct: false },
+          { text: "", correct: false },
+        ],
+      },
+    ]);
   }
   function removeQuestion(qi) {
     setQuestions((qs) => qs.filter((_, i) => i !== qi));
   }
   function updateQuestion(qi, key, value) {
-    setQuestions((qs) => qs.map((q, i) => (i === qi ? { ...q, [key]: value } : q)));
+    setQuestions((qs) =>
+      qs.map((q, i) => (i === qi ? { ...q, [key]: value } : q)),
+    );
   }
   function addOption(qi) {
-    setQuestions((qs) => qs.map((q, i) => (i === qi ? { ...q, options: [...q.options, { text: '', correct: false }] } : q)));
+    setQuestions((qs) =>
+      qs.map((q, i) =>
+        i === qi
+          ? { ...q, options: [...q.options, { text: "", correct: false }] }
+          : q,
+      ),
+    );
   }
   function updateOption(qi, oi, key, value) {
-    setQuestions((qs) => qs.map((q, i) => {
-      if (i !== qi) return q;
-      const options = q.options.map((o, j) => {
-        if (j !== oi) {
-          // for single/truefalse type, only one option can be correct
-          if (key === 'correct' && value === true && q.type !== 'multiple') return { ...o, correct: false };
-          return o;
-        }
-        return { ...o, [key]: value };
-      });
-      return { ...q, options };
-    }));
+    setQuestions((qs) =>
+      qs.map((q, i) => {
+        if (i !== qi) return q;
+        const options = q.options.map((o, j) => {
+          if (j !== oi) {
+            // for single/truefalse type, only one option can be correct
+            if (key === "correct" && value === true && q.type !== "multiple")
+              return { ...o, correct: false };
+            return o;
+          }
+          return { ...o, [key]: value };
+        });
+        return { ...q, options };
+      }),
+    );
   }
   function removeOption(qi, oi) {
-    setQuestions((qs) => qs.map((q, i) => (i === qi ? { ...q, options: q.options.filter((_, j) => j !== oi) } : q)));
+    setQuestions((qs) =>
+      qs.map((q, i) =>
+        i === qi ? { ...q, options: q.options.filter((_, j) => j !== oi) } : q,
+      ),
+    );
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
-      await api.createQuiz({ lecture_id: lectureId, title, pass_score: Number(passScore), allow_retake: allowRetake, questions });
+      await api.createQuiz({
+        lecture_id: lectureId,
+        title,
+        pass_score: Number(passScore),
+        allow_retake: allowRetake,
+        questions,
+      });
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -339,15 +613,31 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
   return (
     <form className="form" onSubmit={handleSubmit}>
       <ErrorBox message={error} />
-      <label>عنوان الاختبار
-        <input required value={title} onChange={(e) => setTitle(e.target.value)} />
+      <label>
+        عنوان الاختبار
+        <input
+          required
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </label>
       <div className="form-grid">
-        <label>درجة النجاح (%)
-          <input type="number" min="0" max="100" value={passScore} onChange={(e) => setPassScore(e.target.value)} />
+        <label>
+          درجة النجاح (%)
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={passScore}
+            onChange={(e) => setPassScore(e.target.value)}
+          />
         </label>
         <label className="checkbox-row">
-          <input type="checkbox" checked={allowRetake} onChange={(e) => setAllowRetake(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={allowRetake}
+            onChange={(e) => setAllowRetake(e.target.checked)}
+          />
           السماح بإعادة المحاولة
         </label>
       </div>
@@ -356,13 +646,32 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
         <div className="question-card" key={qi}>
           <div className="links-header">
             <strong>السؤال {qi + 1}</strong>
-            {questions.length > 1 && <button type="button" className="btn btn-danger btn-small" onClick={() => removeQuestion(qi)}>حذف السؤال</button>}
+            {questions.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-danger btn-small"
+                onClick={() => removeQuestion(qi)}
+              >
+                حذف السؤال
+              </button>
+            )}
           </div>
-          <label>نص السؤال
-            <input required value={q.question_text} onChange={(e) => updateQuestion(qi, 'question_text', e.target.value)} />
+          <label>
+            نص السؤال
+            <input
+              required
+              value={q.question_text}
+              onChange={(e) =>
+                updateQuestion(qi, "question_text", e.target.value)
+              }
+            />
           </label>
-          <label>نوع السؤال
-            <select value={q.type} onChange={(e) => updateQuestion(qi, 'type', e.target.value)}>
+          <label>
+            نوع السؤال
+            <select
+              value={q.type}
+              onChange={(e) => updateQuestion(qi, "type", e.target.value)}
+            >
               <option value="single">اختيار واحد</option>
               <option value="multiple">اختيار متعدد</option>
               <option value="truefalse">صح / خطأ</option>
@@ -371,20 +680,53 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
           <div className="options-list">
             {q.options.map((opt, oi) => (
               <div className="option-row" key={oi}>
-                <input type={q.type === 'multiple' ? 'checkbox' : 'radio'} name={`correct-${qi}`} checked={!!opt.correct} onChange={(e) => updateOption(qi, oi, 'correct', e.target.checked)} />
-                <input placeholder={`الخيار ${oi + 1}`} value={opt.text} onChange={(e) => updateOption(qi, oi, 'text', e.target.value)} />
-                {q.options.length > 2 && <button type="button" className="btn btn-danger btn-small" onClick={() => removeOption(qi, oi)}>حذف</button>}
+                <input
+                  type={q.type === "multiple" ? "checkbox" : "radio"}
+                  name={`correct-${qi}`}
+                  checked={!!opt.correct}
+                  onChange={(e) =>
+                    updateOption(qi, oi, "correct", e.target.checked)
+                  }
+                />
+                <input
+                  placeholder={`الخيار ${oi + 1}`}
+                  value={opt.text}
+                  onChange={(e) => updateOption(qi, oi, "text", e.target.value)}
+                />
+                {q.options.length > 2 && (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-small"
+                    onClick={() => removeOption(qi, oi)}
+                  >
+                    حذف
+                  </button>
+                )}
               </div>
             ))}
-            {q.type !== 'truefalse' && <button type="button" className="btn btn-small" onClick={() => addOption(qi)}>+ إضافة خيار</button>}
+            {q.type !== "truefalse" && (
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => addOption(qi)}
+              >
+                + إضافة خيار
+              </button>
+            )}
           </div>
         </div>
       ))}
-      <button type="button" className="btn btn-small" onClick={addQuestion}>+ إضافة سؤال جديد</button>
+      <button type="button" className="btn btn-small" onClick={addQuestion}>
+        + إضافة سؤال جديد
+      </button>
 
       <div className="form-actions">
-        <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'حفظ الاختبار'}</button>
-        <button className="btn" type="button" onClick={onCancel}>إلغاء</button>
+        <button className="btn btn-primary" disabled={loading} type="submit">
+          {loading ? <Spinner /> : "حفظ الاختبار"}
+        </button>
+        <button className="btn" type="button" onClick={onCancel}>
+          إلغاء
+        </button>
       </div>
     </form>
   );
@@ -396,13 +738,15 @@ function TakeQuiz({ quiz, onSubmitted }) {
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   function toggleAnswer(question, optionIndex) {
     setAnswers((a) => {
       const current = a[question.id] || [];
-      if (question.type === 'multiple') {
-        const next = current.includes(optionIndex) ? current.filter((i) => i !== optionIndex) : [...current, optionIndex];
+      if (question.type === "multiple") {
+        const next = current.includes(optionIndex)
+          ? current.filter((i) => i !== optionIndex)
+          : [...current, optionIndex];
         return { ...a, [question.id]: next };
       }
       return { ...a, [question.id]: [optionIndex] };
@@ -410,7 +754,8 @@ function TakeQuiz({ quiz, onSubmitted }) {
   }
 
   async function handleSubmit() {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       const data = await api.attemptQuiz({ quiz_id: quiz.id, answers });
       setResult(data);
@@ -424,9 +769,15 @@ function TakeQuiz({ quiz, onSubmitted }) {
 
   if (result) {
     return (
-      <div className={`quiz-result ${result.passed ? 'pass' : 'fail'}`}>
-        <h4>{result.passed ? '🎉 اجتزت الاختبار بنجاح' : 'لم تحقق درجة النجاح المطلوبة'}</h4>
-        <p>النتيجة: {result.score}% ({result.correctCount} من {result.total})</p>
+      <div className={`quiz-result ${result.passed ? "pass" : "fail"}`}>
+        <h4>
+          {result.passed
+            ? "🎉 اجتزت الاختبار بنجاح"
+            : "لم تحقق درجة النجاح المطلوبة"}
+        </h4>
+        <p>
+          النتيجة: {result.score}% ({result.correctCount} من {result.total})
+        </p>
       </div>
     );
   }
@@ -437,11 +788,15 @@ function TakeQuiz({ quiz, onSubmitted }) {
       <ErrorBox message={error} />
       {quiz.questions.map((q, qi) => (
         <div className="question-card" key={q.id}>
-          <p><strong>{qi + 1}. {q.question_text}</strong></p>
+          <p>
+            <strong>
+              {qi + 1}. {q.question_text}
+            </strong>
+          </p>
           {q.options.map((opt, oi) => (
             <label className="option-row" key={oi}>
               <input
-                type={q.type === 'multiple' ? 'checkbox' : 'radio'}
+                type={q.type === "multiple" ? "checkbox" : "radio"}
                 name={`take-${q.id}`}
                 checked={(answers[q.id] || []).includes(oi)}
                 onChange={() => toggleAnswer(q, oi)}
@@ -451,7 +806,13 @@ function TakeQuiz({ quiz, onSubmitted }) {
           ))}
         </div>
       ))}
-      <button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>{loading ? <Spinner /> : 'إرسال الإجابات'}</button>
+      <button
+        className="btn btn-primary"
+        disabled={loading}
+        onClick={handleSubmit}
+      >
+        {loading ? <Spinner /> : "إرسال الإجابات"}
+      </button>
     </div>
   );
 }
@@ -459,13 +820,23 @@ function TakeQuiz({ quiz, onSubmitted }) {
 function QuizAnswerKey({ quiz }) {
   return (
     <div className="quiz-box">
-      <h4>{quiz.title} <Badge tone="info">معاينة المشرف/المحاضر — الإجابات الصحيحة</Badge></h4>
+      <h4>
+        {quiz.title}{" "}
+        <Badge tone="info">معاينة المشرف/المحاضر — الإجابات الصحيحة</Badge>
+      </h4>
       {quiz.questions.map((q, qi) => (
         <div className="question-card" key={q.id}>
-          <p><strong>{qi + 1}. {q.question_text}</strong></p>
+          <p>
+            <strong>
+              {qi + 1}. {q.question_text}
+            </strong>
+          </p>
           {q.options.map((opt, oi) => (
-            <div className={`option-row ${opt.correct ? 'correct-answer' : ''}`} key={oi}>
-              {opt.correct ? '✅' : '▫️'} {opt.text}
+            <div
+              className={`option-row ${opt.correct ? "correct-answer" : ""}`}
+              key={oi}
+            >
+              {opt.correct ? "✅" : "▫️"} {opt.text}
             </div>
           ))}
         </div>
@@ -477,14 +848,20 @@ function QuizAnswerKey({ quiz }) {
 /* ---------------- Feedback form ---------------- */
 
 function FeedbackForm({ lectureId }) {
-  const [form, setForm] = useState({ content_rating: 5, lecturer_rating: 5, clarity_rating: 5, comment: '' });
+  const [form, setForm] = useState({
+    content_rating: 5,
+    lecturer_rating: 5,
+    clarity_rating: 5,
+    comment: "",
+  });
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       await api.submitFeedback({ lecture_id: lectureId, ...form });
       setDone(true);
@@ -498,9 +875,17 @@ function FeedbackForm({ lectureId }) {
   if (done) return <SuccessBox message="شكراً لك، تم إرسال تقييمك." />;
 
   const ratingField = (key, label) => (
-    <label>{label}
-      <select value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}>
-        {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} / 5</option>)}
+    <label>
+      {label}
+      <select
+        value={form[key]}
+        onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+      >
+        {[5, 4, 3, 2, 1].map((n) => (
+          <option key={n} value={n}>
+            {n} / 5
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -509,24 +894,64 @@ function FeedbackForm({ lectureId }) {
     <form className="form form-grid" onSubmit={handleSubmit}>
       <h4 className="full">تقييم المحاضرة</h4>
       <ErrorBox message={error} />
-      {ratingField('content_rating', 'تقييم المحتوى')}
-      {ratingField('lecturer_rating', 'تقييم المحاضر')}
-      {ratingField('clarity_rating', 'وضوح الشرح')}
-      <label className="full">ملاحظات إضافية
-        <textarea rows={2} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} />
+      {ratingField("content_rating", "تقييم المحتوى")}
+      {ratingField("lecturer_rating", "تقييم المحاضر")}
+      {ratingField("clarity_rating", "وضوح الشرح")}
+      <label className="full">
+        ملاحظات إضافية
+        <textarea
+          rows={2}
+          value={form.comment}
+          onChange={(e) => setForm({ ...form, comment: e.target.value })}
+        />
       </label>
       <div className="form-actions full">
-        <button className="btn btn-primary" disabled={loading} type="submit">{loading ? <Spinner /> : 'إرسال التقييم'}</button>
+        <button className="btn btn-primary" disabled={loading} type="submit">
+          {loading ? <Spinner /> : "إرسال التقييم"}
+        </button>
       </div>
     </form>
   );
+}
+
+/* ---------------- Watch-time tracking (trainee video views) ---------------- */
+
+function useWatchTimeTracker(lectureId, enabled) {
+  const pendingRef = useRef(0);
+  useEffect(() => {
+    if (!enabled || !lectureId) return undefined;
+    pendingRef.current = 0;
+    const flush = (secs) => {
+      if (!secs || secs <= 0) return;
+      api.heartbeatLecture(lectureId, secs).catch(() => {
+        /* ignore */
+      });
+    };
+    const tick = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        pendingRef.current += 5;
+      }
+      if (pendingRef.current >= 20) {
+        const toSend = pendingRef.current;
+        pendingRef.current = 0;
+        flush(toSend);
+      }
+    }, 5000);
+    return () => {
+      clearInterval(tick);
+      flush(pendingRef.current);
+      pendingRef.current = 0;
+    };
+  }, [lectureId, enabled]);
 }
 
 /* ---------------- Lecture detail ---------------- */
 
 function toEmbedUrl(url) {
   if (!url) return null;
-  const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/);
+  const yt = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/,
+  );
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
   return null;
 }
@@ -536,21 +961,29 @@ function LectureDetail({ lecture, user, onBack }) {
   const [feedback, setFeedback] = useState(null);
   const [attempts, setAttempts] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const canModerate = user.role === 'admin' || user.role === 'lecturer';
+  const [error, setError] = useState("");
+  const canModerate = user.role === "admin" || user.role === "lecturer";
   const embed = toEmbedUrl(lecture.video_url);
 
+  useWatchTimeTracker(lecture.id, user.role === "trainee" && !!embed);
+
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       await api.viewLecture(lecture.id);
       const q = await api.getQuizzes(lecture.id);
       setQuizzes(q.quizzes);
-      if (canModerate && (lecture.lecturer_username === user.username || user.role === 'admin')) {
+      if (
+        canModerate &&
+        (lecture.lecturer_username === user.username || user.role === "admin")
+      ) {
         try {
           const fb = await api.getFeedback(lecture.id);
           setFeedback(fb.feedback);
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+          /* ignore */
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -559,19 +992,27 @@ function LectureDetail({ lecture, user, onBack }) {
     }
   }, [lecture.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="panel">
-      <button className="btn btn-small" onClick={onBack}>→ رجوع</button>
+      <button className="btn btn-small" onClick={onBack}>
+        → رجوع
+      </button>
       <h2>{lecture.title}</h2>
       <div className="meta-row">
-        <Badge>{lecture.topic || 'بدون موضوع محدد'}</Badge>
-        <Badge tone={lecture.status === 'approved' ? 'success' : 'warning'}>{STATUS_LABELS[lecture.status]}</Badge>
+        <Badge>{lecture.topic || "بدون موضوع محدد"}</Badge>
+        <Badge tone={lecture.status === "approved" ? "success" : "warning"}>
+          {STATUS_LABELS[lecture.status]}
+        </Badge>
         <span className="muted">المحاضر: {lecture.lecturer_name}</span>
         <span className="muted">👁 {lecture.view_count}</span>
       </div>
-      {lecture.description && <p className="description">{lecture.description}</p>}
+      {lecture.description && (
+        <p className="description">{lecture.description}</p>
+      )}
 
       {embed && (
         <div className="video-wrap">
@@ -579,13 +1020,27 @@ function LectureDetail({ lecture, user, onBack }) {
         </div>
       )}
       {!embed && lecture.video_url && (
-        <p><a href={lecture.video_url} target="_blank" rel="noreferrer">▶ مشاهدة الفيديو</a></p>
+        <p>
+          <a href={lecture.video_url} target="_blank" rel="noreferrer">
+            ▶ مشاهدة الفيديو
+          </a>
+        </p>
       )}
-      {lecture.slides_url && <p><a href={lecture.slides_url} target="_blank" rel="noreferrer">📑 عرض الشرائح</a></p>}
+      {lecture.slides_url && (
+        <p>
+          <a href={lecture.slides_url} target="_blank" rel="noreferrer">
+            📑 عرض الشرائح
+          </a>
+        </p>
+      )}
       {lecture.extra_links?.length > 0 && (
         <ul className="extra-links">
           {lecture.extra_links.map((l, i) => (
-            <li key={i}><a href={l.url} target="_blank" rel="noreferrer">🔗 {l.label || l.url}</a></li>
+            <li key={i}>
+              <a href={l.url} target="_blank" rel="noreferrer">
+                🔗 {l.label || l.url}
+              </a>
+            </li>
           ))}
         </ul>
       )}
@@ -593,24 +1048,31 @@ function LectureDetail({ lecture, user, onBack }) {
       {loading && <Spinner />}
       <ErrorBox message={error} />
 
-      {!loading && quizzes.map((quiz) => (
-        <div key={quiz.id}>
-          {user.role === 'trainee' ? <TakeQuiz quiz={quiz} /> : <QuizAnswerKey quiz={quiz} />}
-        </div>
-      ))}
+      {!loading &&
+        quizzes.map((quiz) => (
+          <div key={quiz.id}>
+            {user.role === "trainee" ? (
+              <TakeQuiz quiz={quiz} />
+            ) : (
+              <QuizAnswerKey quiz={quiz} />
+            )}
+          </div>
+        ))}
 
-      {user.role === 'trainee' && <FeedbackForm lectureId={lecture.id} />}
+      {user.role === "trainee" && <FeedbackForm lectureId={lecture.id} />}
 
       {feedback && (
         <div className="panel-sub">
           <h4>تقييمات المتدربين ({feedback.length})</h4>
-          {feedback.length === 0 && <p className="muted">لا توجد تقييمات بعد.</p>}
+          {feedback.length === 0 && (
+            <p className="muted">لا توجد تقييمات بعد.</p>
+          )}
           {feedback.map((f) => (
             <div className="feedback-item" key={f.id}>
               <div className="meta-row">
-                <span>المحتوى: {f.content_rating ?? '-'}/5</span>
-                <span>المحاضر: {f.lecturer_rating ?? '-'}/5</span>
-                <span>الوضوح: {f.clarity_rating ?? '-'}/5</span>
+                <span>المحتوى: {f.content_rating ?? "-"}/5</span>
+                <span>المحاضر: {f.lecturer_rating ?? "-"}/5</span>
+                <span>الوضوح: {f.clarity_rating ?? "-"}/5</span>
               </div>
               {f.comment && <p className="muted">{f.comment}</p>}
             </div>
@@ -623,7 +1085,15 @@ function LectureDetail({ lecture, user, onBack }) {
 
 /* ---------------- Lecture list / card ---------------- */
 
-function LectureCard({ lecture, programs, onOpen, onEdit, onApprove, onDelete, showManage }) {
+function LectureCard({
+  lecture,
+  programs,
+  onOpen,
+  onEdit,
+  onApprove,
+  onDelete,
+  showManage,
+}) {
   const programName = programs.find((p) => p.id === lecture.program_id)?.name;
   return (
     <div className="lecture-card">
@@ -631,16 +1101,43 @@ function LectureCard({ lecture, programs, onOpen, onEdit, onApprove, onDelete, s
         <h3>{lecture.title}</h3>
         <div className="meta-row">
           {programName && <Badge tone="info">{programName}</Badge>}
-          <Badge tone={lecture.status === 'approved' ? 'success' : 'warning'}>{STATUS_LABELS[lecture.status]}</Badge>
+          <Badge tone={lecture.status === "approved" ? "success" : "warning"}>
+            {STATUS_LABELS[lecture.status]}
+          </Badge>
         </div>
-        <p className="muted">المحاضر: {lecture.lecturer_name} · 👁 {lecture.view_count}</p>
+        <p className="muted">
+          المحاضر: {lecture.lecturer_name} · 👁 {lecture.view_count}
+        </p>
       </div>
       {showManage && (
         <div className="lecture-card-actions">
-          <button className="btn btn-small" onClick={() => onEdit(lecture)}>تعديل</button>
-          {onApprove && lecture.status === 'draft' && <button className="btn btn-small btn-success" onClick={() => onApprove(lecture, 'approved')}>اعتماد</button>}
-          {onApprove && lecture.status === 'approved' && <button className="btn btn-small" onClick={() => onApprove(lecture, 'draft')}>إرجاع لمسودة</button>}
-          {onDelete && <button className="btn btn-small btn-danger" onClick={() => onDelete(lecture)}>حذف</button>}
+          <button className="btn btn-small" onClick={() => onEdit(lecture)}>
+            تعديل
+          </button>
+          {onApprove && lecture.status === "draft" && (
+            <button
+              className="btn btn-small btn-success"
+              onClick={() => onApprove(lecture, "approved")}
+            >
+              اعتماد
+            </button>
+          )}
+          {onApprove && lecture.status === "approved" && (
+            <button
+              className="btn btn-small"
+              onClick={() => onApprove(lecture, "draft")}
+            >
+              إرجاع لمسودة
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="btn btn-small btn-danger"
+              onClick={() => onDelete(lecture)}
+            >
+              حذف
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -652,15 +1149,19 @@ function LectureCard({ lecture, programs, onOpen, onEdit, onApprove, onDelete, s
 function TraineeDashboard({ user }) {
   const [programs, setPrograms] = useState([]);
   const [lectures, setLectures] = useState([]);
-  const [programFilter, setProgramFilter] = useState('');
+  const [programFilter, setProgramFilter] = useState("");
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
-      const [p, l] = await Promise.all([api.getPrograms(), api.getLectures(programFilter || undefined)]);
+      const [p, l] = await Promise.all([
+        api.getPrograms(),
+        api.getLectures(programFilter || undefined),
+      ]);
       setPrograms(p.programs);
       setLectures(l.lectures);
     } catch (err) {
@@ -670,26 +1171,55 @@ function TraineeDashboard({ user }) {
     }
   }, [programFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  if (selected) return <LectureDetail lecture={selected} user={user} onBack={() => { setSelected(null); load(); }} />;
+  if (selected)
+    return (
+      <LectureDetail
+        lecture={selected}
+        user={user}
+        onBack={() => {
+          setSelected(null);
+          load();
+        }}
+      />
+    );
 
   return (
     <div className="panel">
       <h2>المحاضرات المتاحة</h2>
       <div className="toolbar">
-        <label>تصفية حسب البرنامج
-          <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)}>
+        <label>
+          تصفية حسب البرنامج
+          <select
+            value={programFilter}
+            onChange={(e) => setProgramFilter(e.target.value)}
+          >
             <option value="">جميع البرامج</option>
-            {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {programs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
           </select>
         </label>
       </div>
       {loading && <Spinner />}
       <ErrorBox message={error} />
-      {!loading && lectures.length === 0 && <p className="muted">لا توجد محاضرات متاحة حالياً.</p>}
+      {!loading && lectures.length === 0 && (
+        <p className="muted">لا توجد محاضرات متاحة حالياً.</p>
+      )}
       <div className="lecture-grid">
-        {lectures.map((l) => <LectureCard key={l.id} lecture={l} programs={programs} onOpen={setSelected} />)}
+        {lectures.map((l) => (
+          <LectureCard
+            key={l.id}
+            lecture={l}
+            programs={programs}
+            onOpen={setSelected}
+          />
+        ))}
       </div>
     </div>
   );
@@ -704,10 +1234,11 @@ function LecturerDashboard({ user }) {
   const [editing, setEditing] = useState(null); // 'new' | lecture obj | null
   const [managingQuiz, setManagingQuiz] = useState(null); // lecture obj
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       const [p, l] = await Promise.all([api.getPrograms(), api.getLectures()]);
       setPrograms(p.programs);
@@ -719,7 +1250,9 @@ function LecturerDashboard({ user }) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleDelete(lecture) {
     if (!confirm(`هل تريد حذف المحاضرة "${lecture.title}"؟`)) return;
@@ -731,16 +1264,29 @@ function LecturerDashboard({ user }) {
     }
   }
 
-  if (selected) return <LectureDetail lecture={selected} user={user} onBack={() => { setSelected(null); load(); }} />;
+  if (selected)
+    return (
+      <LectureDetail
+        lecture={selected}
+        user={user}
+        onBack={() => {
+          setSelected(null);
+          load();
+        }}
+      />
+    );
 
   if (editing) {
     return (
       <div className="panel">
-        <h2>{editing === 'new' ? 'محاضرة جديدة' : 'تعديل المحاضرة'}</h2>
+        <h2>{editing === "new" ? "محاضرة جديدة" : "تعديل المحاضرة"}</h2>
         <LectureForm
           programs={programs}
-          initial={editing === 'new' ? null : editing}
-          onSaved={() => { setEditing(null); load(); }}
+          initial={editing === "new" ? null : editing}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
           onCancel={() => setEditing(null)}
         />
       </div>
@@ -750,9 +1296,15 @@ function LecturerDashboard({ user }) {
   if (managingQuiz) {
     return (
       <div className="panel">
-        <button className="btn btn-small" onClick={() => setManagingQuiz(null)}>→ رجوع</button>
+        <button className="btn btn-small" onClick={() => setManagingQuiz(null)}>
+          → رجوع
+        </button>
         <h2>اختبار: {managingQuiz.title}</h2>
-        <QuizForm lectureId={managingQuiz.id} onSaved={() => setManagingQuiz(null)} onCancel={() => setManagingQuiz(null)} />
+        <QuizForm
+          lectureId={managingQuiz.id}
+          onSaved={() => setManagingQuiz(null)}
+          onCancel={() => setManagingQuiz(null)}
+        />
       </div>
     );
   }
@@ -761,16 +1313,32 @@ function LecturerDashboard({ user }) {
     <div className="panel">
       <div className="toolbar">
         <h2>محاضراتي</h2>
-        <button className="btn btn-primary" onClick={() => setEditing('new')}>+ محاضرة جديدة</button>
+        <button className="btn btn-primary" onClick={() => setEditing("new")}>
+          + محاضرة جديدة
+        </button>
       </div>
       {loading && <Spinner />}
       <ErrorBox message={error} />
-      {!loading && lectures.length === 0 && <p className="muted">لم تُنشئ أي محاضرات بعد.</p>}
+      {!loading && lectures.length === 0 && (
+        <p className="muted">لم تُنشئ أي محاضرات بعد.</p>
+      )}
       <div className="lecture-grid">
         {lectures.map((l) => (
           <div key={l.id} className="lecture-card-with-extra">
-            <LectureCard lecture={l} programs={programs} onOpen={setSelected} onEdit={setEditing} onDelete={handleDelete} showManage />
-            <button className="btn btn-small" onClick={() => setManagingQuiz(l)}>📝 إدارة الاختبار</button>
+            <LectureCard
+              lecture={l}
+              programs={programs}
+              onOpen={setSelected}
+              onEdit={setEditing}
+              onDelete={handleDelete}
+              showManage
+            />
+            <button
+              className="btn btn-small"
+              onClick={() => setManagingQuiz(l)}
+            >
+              📝 إدارة الاختبار
+            </button>
           </div>
         ))}
       </div>
@@ -782,15 +1350,15 @@ function LecturerDashboard({ user }) {
 
 function StatsCards({ stats }) {
   const items = [
-    ['إجمالي المستخدمين', stats.totalUsers],
-    ['المستخدمون المفعّلون', stats.activeUsers],
-    ['بانتظار الموافقة', stats.pendingUsers],
-    ['إجمالي المحاضرات', stats.totalLectures],
-    ['المحاضرات الممتمدة', stats.approvedLectures],
-    ['مسودات', stats.draftLectures],
-    ['إجمالي المشاهدات', stats.totalViews],
-    ['متوسط درجات الاختبارات', `${stats.avgQuizScore}%`],
-    ['متوسط رضا المتدربين', `${stats.avgSatisfaction}/5`],
+    ["إجمالي المستخدمين", stats.totalUsers],
+    ["المستخدمون المفعّلون", stats.activeUsers],
+    ["بانتظار الموافقة", stats.pendingUsers],
+    ["إجمالي المحاضرات", stats.totalLectures],
+    ["المحاضرات الممتمدة", stats.approvedLectures],
+    ["مسودات", stats.draftLectures],
+    ["إجمالي المشاهدات", stats.totalViews],
+    ["متوسط درجات الاختبارات", `${stats.avgQuizScore}%`],
+    ["متوسط رضا المتدربين", `${stats.avgSatisfaction}/5`],
   ];
   return (
     <div className="stats-grid">
@@ -807,10 +1375,11 @@ function StatsCards({ stats }) {
 function UsersManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError("");
     try {
       const data = await api.getUsers();
       setUsers(data.users);
@@ -821,19 +1390,25 @@ function UsersManagement() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function updateStatus(u, status) {
     try {
       await api.updateUser({ username: u.username, status });
       load();
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert(err.message);
+    }
   }
   async function updateRole(u, role) {
     try {
       await api.updateUser({ username: u.username, role });
       load();
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   if (loading) return <Spinner />;
@@ -842,7 +1417,13 @@ function UsersManagement() {
       <ErrorBox message={error} />
       <table className="data-table">
         <thead>
-          <tr><th>الاسم</th><th>اسم المستخدم</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr>
+          <tr>
+            <th>الاسم</th>
+            <th>اسم المستخدم</th>
+            <th>الدور</th>
+            <th>الحالة</th>
+            <th>إجراءات</th>
+          </tr>
         </thead>
         <tbody>
           {users.map((u) => (
@@ -850,14 +1431,47 @@ function UsersManagement() {
               <td>{u.name}</td>
               <td>{u.username}</td>
               <td>
-                <select value={u.role} onChange={(e) => updateRole(u, e.target.value)}>
-                  {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                <select
+                  value={u.role}
+                  onChange={(e) => updateRole(u, e.target.value)}
+                >
+                  {Object.entries(ROLE_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
                 </select>
               </td>
-              <td><Badge tone={u.status === 'approved' ? 'success' : u.status === 'pending' ? 'warning' : 'danger'}>{USER_STATUS_LABELS[u.status]}</Badge></td>
               <td>
-                {u.status !== 'approved' && <button className="btn btn-small btn-success" onClick={() => updateStatus(u, 'approved')}>موافقة</button>}
-                {u.status !== 'rejected' && <button className="btn btn-small btn-danger" onClick={() => updateStatus(u, 'rejected')}>رفض</button>}
+                <Badge
+                  tone={
+                    u.status === "approved"
+                      ? "success"
+                      : u.status === "pending"
+                        ? "warning"
+                        : "danger"
+                  }
+                >
+                  {USER_STATUS_LABELS[u.status]}
+                </Badge>
+              </td>
+              <td>
+                {u.status !== "approved" && (
+                  <button
+                    className="btn btn-small btn-success"
+                    onClick={() => updateStatus(u, "approved")}
+                  >
+                    موافقة
+                  </button>
+                )}
+                {u.status !== "rejected" && (
+                  <button
+                    className="btn btn-small btn-danger"
+                    onClick={() => updateStatus(u, "rejected")}
+                  >
+                    رفض
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -869,41 +1483,68 @@ function UsersManagement() {
 
 function ProgramsManagement() {
   const [programs, setPrograms] = useState([]);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.getPrograms();
       setPrograms(data.programs);
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleAdd(e) {
     e.preventDefault();
     try {
       await api.createProgram({ name, description });
-      setName(''); setDescription('');
+      setName("");
+      setDescription("");
       load();
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   return (
     <div>
       <ErrorBox message={error} />
-      {loading ? <Spinner /> : (
+      {loading ? (
+        <Spinner />
+      ) : (
         <ul className="simple-list">
-          {programs.map((p) => <li key={p.id}><strong>{p.name}</strong>{p.description ? ` — ${p.description}` : ''}</li>)}
+          {programs.map((p) => (
+            <li key={p.id}>
+              <strong>{p.name}</strong>
+              {p.description ? ` — ${p.description}` : ""}
+            </li>
+          ))}
         </ul>
       )}
       <form className="form-inline" onSubmit={handleAdd}>
-        <input placeholder="اسم برنامج جديد" required value={name} onChange={(e) => setName(e.target.value)} />
-        <input placeholder="وصف مختصر (اختياري)" value={description} onChange={(e) => setDescription(e.target.value)} />
-        <button className="btn btn-primary btn-small" type="submit">إضافة</button>
+        <input
+          placeholder="اسم برنامج جديد"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          placeholder="وصف مختصر (اختياري)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <button className="btn btn-primary btn-small" type="submit">
+          إضافة
+        </button>
       </form>
     </div>
   );
@@ -914,7 +1555,7 @@ function LecturesModeration({ user, onOpen }) {
   const [lectures, setLectures] = useState([]);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -922,23 +1563,49 @@ function LecturesModeration({ user, onOpen }) {
       const [p, l] = await Promise.all([api.getPrograms(), api.getLectures()]);
       setPrograms(p.programs);
       setLectures(l.lectures);
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleApprove(lecture, status) {
-    try { await api.approveLecture(lecture.id, status); load(); } catch (err) { alert(err.message); }
+    try {
+      await api.approveLecture(lecture.id, status);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
   }
   async function handleDelete(lecture) {
     if (!confirm(`حذف المحاضرة "${lecture.title}"؟`)) return;
-    try { await api.deleteLecture(lecture.id); load(); } catch (err) { alert(err.message); }
+    try {
+      await api.deleteLecture(lecture.id);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   if (editing) {
     return (
       <div>
-        <button className="btn btn-small" onClick={() => setEditing(null)}>→ رجوع</button>
-        <LectureForm programs={programs} initial={editing === 'new' ? null : editing} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />
+        <button className="btn btn-small" onClick={() => setEditing(null)}>
+          → رجوع
+        </button>
+        <LectureForm
+          programs={programs}
+          initial={editing === "new" ? null : editing}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+          onCancel={() => setEditing(null)}
+        />
       </div>
     );
   }
@@ -946,46 +1613,197 @@ function LecturesModeration({ user, onOpen }) {
   return (
     <div>
       <div className="toolbar">
-        <button className="btn btn-primary btn-small" onClick={() => setEditing('new')}>+ إضافة محاضرة</button>
+        <button
+          className="btn btn-primary btn-small"
+          onClick={() => setEditing("new")}
+        >
+          + إضافة محاضرة
+        </button>
       </div>
       {loading && <Spinner />}
       <ErrorBox message={error} />
       <div className="lecture-grid">
         {lectures.map((l) => (
-          <LectureCard key={l.id} lecture={l} programs={programs} onOpen={onOpen} onEdit={setEditing} onApprove={handleApprove} onDelete={handleDelete} showManage />
+          <LectureCard
+            key={l.id}
+            lecture={l}
+            programs={programs}
+            onOpen={onOpen}
+            onEdit={setEditing}
+            onApprove={handleApprove}
+            onDelete={handleDelete}
+            showManage
+          />
         ))}
       </div>
     </div>
   );
 }
 
+function AttendanceReport() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api.getAdminReport();
+      setRows(data.report || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function exportCsv() {
+    const header = [
+      "اسم المحاضرة",
+      "اسم المتدرب",
+      "تاريخ نزول المحاضرة",
+      "تاريخ الحضور",
+      "مدة المشاهدة (دقيقة)",
+    ];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [header.map(esc).join(",")];
+    rows.forEach((r) => {
+      lines.push(
+        [
+          esc(r.lecture_title),
+          esc(r.trainee_name),
+          esc(fmtDate(r.lecture_created_at)),
+          esc(fmtDateTime(r.first_viewed_at)),
+          esc(r.watched_minutes),
+        ].join(","),
+      );
+    });
+    const blob = new Blob(["﻿" + lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "تقرير_المتابعة.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  if (loading) return <Spinner />;
+  return (
+    <div>
+      <ErrorBox message={error} />
+      <div className="toolbar">
+        <span className="muted">{rows.length} سجل</span>
+        <button
+          className="btn btn-small"
+          onClick={exportCsv}
+          disabled={!rows.length}
+        >
+          ⬇ تصدير CSV
+        </button>
+      </div>
+      {rows.length === 0 && <p className="muted">لا توجد بيانات مشاهدة بعد.</p>}
+      {rows.length > 0 && (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>اسم المحاضرة</th>
+              <th>اسم المتدرب</th>
+              <th>تاريخ نزول المحاضرة</th>
+              <th>تاريخ الحضور</th>
+              <th>مدة المشاهدة (دقيقة)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td>{r.lecture_title}</td>
+                <td>{r.trainee_name}</td>
+                <td>{fmtDate(r.lecture_created_at)}</td>
+                <td>{fmtDateTime(r.first_viewed_at)}</td>
+                <td>{r.watched_minutes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function AdminDashboard({ user }) {
-  const [tab, setTab] = useState('stats');
+  const [tab, setTab] = useState("stats");
   const [stats, setStats] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (tab === 'stats') {
-      api.getStats().then((d) => setStats(d.stats)).catch((e) => setError(e.message));
+    if (tab === "stats") {
+      api
+        .getStats()
+        .then((d) => setStats(d.stats))
+        .catch((e) => setError(e.message));
     }
   }, [tab]);
 
-  if (selected) return <LectureDetail lecture={selected} user={user} onBack={() => setSelected(null)} />;
+  if (selected)
+    return (
+      <LectureDetail
+        lecture={selected}
+        user={user}
+        onBack={() => setSelected(null)}
+      />
+    );
 
   return (
     <div className="panel">
       <div className="sub-tabs">
-        <button className={tab === 'stats' ? 'tab active' : 'tab'} onClick={() => setTab('stats')}>لوحة الإحصائيات</button>
-        <button className={tab === 'users' ? 'tab active' : 'tab'} onClick={() => setTab('users')}>المستخدمون</button>
-        <button className={tab === 'programs' ? 'tab active' : 'tab'} onClick={() => setTab('programs')}>البرامج التدريبية</button>
-        <button className={tab === 'lectures' ? 'tab active' : 'tab'} onClick={() => setTab('lectures')}>المحاضرات</button>
+        <button
+          className={tab === "stats" ? "tab active" : "tab"}
+          onClick={() => setTab("stats")}
+        >
+          لوحة الإحصائيات
+        </button>
+        <button
+          className={tab === "users" ? "tab active" : "tab"}
+          onClick={() => setTab("users")}
+        >
+          المستخدمون
+        </button>
+        <button
+          className={tab === "programs" ? "tab active" : "tab"}
+          onClick={() => setTab("programs")}
+        >
+          البرامج التدريبية
+        </button>
+        <button
+          className={tab === "lectures" ? "tab active" : "tab"}
+          onClick={() => setTab("lectures")}
+        >
+          المحاضرات
+        </button>
+        <button
+          className={tab === "report" ? "tab active" : "tab"}
+          onClick={() => setTab("report")}
+        >
+          تقرير المتابعة
+        </button>
       </div>
       <ErrorBox message={error} />
-      {tab === 'stats' && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
-      {tab === 'users' && <UsersManagement />}
-      {tab === 'programs' && <ProgramsManagement />}
-      {tab === 'lectures' && <LecturesModeration user={user} onOpen={setSelected} />}
+      {tab === "stats" && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
+      {tab === "users" && <UsersManagement />}
+      {tab === "programs" && <ProgramsManagement />}
+      {tab === "lectures" && (
+        <LecturesModeration user={user} onOpen={setSelected} />
+      )}
+      {tab === "report" && <AttendanceReport />}
     </div>
   );
 }
@@ -995,11 +1813,14 @@ function AdminDashboard({ user }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [view, setView] = useState('home'); // home | profile
+  const [view, setView] = useState("home"); // home | profile
 
   useEffect(() => {
     async function restore() {
-      if (!getToken()) { setCheckingSession(false); return; }
+      if (!getToken()) {
+        setCheckingSession(false);
+        return;
+      }
       try {
         const data = await api.me();
         setUser(data.user);
@@ -1013,13 +1834,21 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(async () => {
-    try { await api.logout(); } catch (e) { /* ignore */ }
+    try {
+      await api.logout();
+    } catch (e) {
+      /* ignore */
+    }
     setToken(null);
     setUser(null);
   }, []);
 
   if (checkingSession) {
-    return <div className="app-loading"><Spinner /></div>;
+    return (
+      <div className="app-loading">
+        <Spinner />
+      </div>
+    );
   }
 
   if (!user) {
@@ -1034,21 +1863,42 @@ export default function App() {
           <span>{PLATFORM_NAME}</span>
         </div>
         <nav className="app-header-nav">
-          <button className={view === 'home' ? 'tab active' : 'tab'} onClick={() => setView('home')}>الرئيسية</button>
-          <button className={view === 'profile' ? 'tab active' : 'tab'} onClick={() => setView('profile')}>الملف الشخصي</button>
+          <button
+            className={view === "home" ? "tab active" : "tab"}
+            onClick={() => setView("home")}
+          >
+            الرئيسية
+          </button>
+          <button
+            className={view === "profile" ? "tab active" : "tab"}
+            onClick={() => setView("profile")}
+          >
+            الملف الشخصي
+          </button>
         </nav>
         <div className="app-header-user">
-          <span>{user.name}</span>
-          <Badge tone="info">{ROLE_LABELS[user.role]}</Badge>
-          <button className="btn btn-small" onClick={handleLogout}>خروج</button>
+          <div className="app-header-user-row">
+            <span>{user.name}</span>
+            <Badge tone="info">{ROLE_LABELS[user.role]}</Badge>
+            <button className="btn btn-small" onClick={handleLogout}>
+              خروج
+            </button>
+          </div>
+          <CopyrightMark className="header-copyright" />
         </div>
       </header>
 
       <main className="app-main">
-        {view === 'profile' && <ProfilePage user={user} onUpdated={setUser} />}
-        {view === 'home' && user.role === 'trainee' && <TraineeDashboard user={user} />}
-        {view === 'home' && user.role === 'lecturer' && <LecturerDashboard user={user} />}
-        {view === 'home' && user.role === 'admin' && <AdminDashboard user={user} />}
+        {view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
+        {view === "home" && user.role === "trainee" && (
+          <TraineeDashboard user={user} />
+        )}
+        {view === "home" && user.role === "lecturer" && (
+          <LecturerDashboard user={user} />
+        )}
+        {view === "home" && user.role === "admin" && (
+          <AdminDashboard user={user} />
+        )}
       </main>
     </div>
   );
