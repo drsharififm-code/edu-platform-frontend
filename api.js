@@ -59,6 +59,7 @@ export const api = {
   approveLecture: (id, status) => request('/api/lectures/approve', { method: 'POST', body: { id, status } }),
   deleteLecture: (id) => request('/api/lectures/delete', { method: 'POST', body: { id } }),
   viewLecture: (id) => request('/api/lectures/view', { method: 'POST', body: { id } }),
+  heartbeatLecture: (id, seconds) => request('/api/lectures/heartbeat', { method: 'POST', body: { id, seconds } }),
 
   getQuizzes: (lectureId) => request(`/api/quizzes?lecture_id=${lectureId}`),
   createQuiz: (payload) => request('/api/quizzes', { method: 'POST', body: payload }),
@@ -70,6 +71,7 @@ export const api = {
   getFeedback: (lectureId) => request(`/api/feedback?lecture_id=${lectureId}`),
 
   getStats: () => request('/api/stats'),
+  getAdminReport: () => request('/api/admin/report'),
 };
 
 export { getToken };
