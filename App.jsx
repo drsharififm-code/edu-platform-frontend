@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken } from "./api.js";
 
+const PROGRAM_LOGO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIQAAAB6CAMAAABJAgv8AAABIFBMVEX+/v6YpKbO6NS3xsfN19bl6uuttrjY5uVRpmsXOjijqq2q17bEycwwdk1PmGoXZTfa9eYnR0ZyuYeWx6YtaEczVlPQ89c5mldFmVlRh2ZLaGduh4h2lo+X1aqoyLO418mHxphzp4aIt5iVt6top3pWdXO1vcFmmXmEmpm45cUaQ0J2xI5YsnOIqJWt4boZXTQjWzckZDyXnqMaQT1Fd1bW3eE3oVpGhFxFpFxotHwiOzs4gllDWVlje3sdaEAiQD04mmNjhnlEZVzj+t06ZWM5omSN0ZcVP0Q8hGBesYAbVlJJX2JmeoC58scAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADfPnBAAAAYHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8AAAAAAAAAAAAAAAAAAAAAAAAEoWZuAAAJGUlEQVR42u1aaXfiuBLFli1veLfBNph9h7CEkKWT7vQ+M+/N/P+/82QCRpZEeizmnfc+UCd9EgyRrqpu3SpVulK52tWudrWrXe1qV7va1a52tav935gjGi1DvGSF2rLjPXleWuNdQOw+2/bKtu+63DjSRT1SkdUjj2+NfrAymz2/NzBXwQ3fKbzPqj91Kk7N8CLV4IjEYHXnH35u3a0GDkcoPKuTv1iqUav0Cl3bOjlQUe3m/rvRG1txHFvNvnTm8KIkSeLbb3o/UhzSwirrC38dF16PNz2xY5m2bZuZZd+7bWJ/Y75Q7+vI7u9Vb278rHeK76tqOXrW7r4WieTcBeZ6E/da+8ei1Oo+rFbx6Wiiv/hx/0P1Op3USP2Op1pRtCD2TCO/pCN6JE1te1zE1R5vjo+mXlRX53gyO6kapSTN1EEpEFZAZpT4bJO4Km3LNtHhlp5leWS8l48qlZQdtUyeymZM47IZeeqbm8H8s9WhFzfuF/Sz+rRMgptjOl1WLLEQ45XJ1CE2CONSEHb/jJ6MWc+n0aUgFPML9Wxgn1lhYLNQ1B5VSt9a9WUZYj7ckSs4z8/nsnwc9BhPvYgigFdOKAZr8tjG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";
+
 const PLATFORM_NAME = "منصة التعليم الالكتروني بطب الأسرة و المجتمع";
 const COPYRIGHT = "© Dr.sharifi.edu";
 
@@ -937,12 +940,82 @@ function useWatchTimeTracker(lectureId, enabled) {
         flush(toSend);
       }
     }, 5000);
+    const handleHide = () => {
+      if (document.visibilityState === "hidden" && pendingRef.current > 0) {
+        const toSend = pendingRef.current;
+        pendingRef.current = 0;
+        flush(toSend);
+      }
+    };
+    document.addEventListener("visibilitychange", handleHide);
+    window.addEventListener("pagehide", handleHide);
     return () => {
       clearInterval(tick);
+      document.removeEventListener("visibilitychange", handleHide);
+      window.removeEventListener("pagehide", handleHide);
       flush(pendingRef.current);
       pendingRef.current = 0;
     };
   }, [lectureId, enabled]);
+}
+
+function useVideoElementWatchTime(lectureId, videoRef, enabled) {
+  const pendingRef = useRef(0);
+  const lastTimeRef = useRef(null);
+  useEffect(() => {
+    if (!enabled || !lectureId) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+    pendingRef.current = 0;
+    lastTimeRef.current = null;
+    const flush = () => {
+      const secs = pendingRef.current;
+      if (!secs || secs <= 0) return;
+      pendingRef.current = 0;
+      api.heartbeatLecture(lectureId, secs).catch(() => {
+        /* ignore */
+      });
+    };
+    const onTimeUpdate = () => {
+      if (video.paused || video.seeking) {
+        lastTimeRef.current = video.currentTime;
+        return;
+      }
+      if (lastTimeRef.current != null) {
+        const delta = video.currentTime - lastTimeRef.current;
+        if (delta > 0 && delta < 2) {
+          pendingRef.current += delta;
+        }
+      }
+      lastTimeRef.current = video.currentTime;
+      if (pendingRef.current >= 15) flush();
+    };
+    const onPauseOrEnd = () => {
+      lastTimeRef.current = null;
+      flush();
+    };
+    const onSeeking = () => {
+      lastTimeRef.current = null;
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("pause", onPauseOrEnd);
+    video.addEventListener("ended", onPauseOrEnd);
+    video.addEventListener("seeking", onSeeking);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("pause", onPauseOrEnd);
+      video.removeEventListener("ended", onPauseOrEnd);
+      video.removeEventListener("seeking", onSeeking);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [lectureId, enabled, videoRef]);
 }
 
 /* ---------------- Lecture detail ---------------- */
@@ -956,6 +1029,11 @@ function toEmbedUrl(url) {
   return null;
 }
 
+function isDirectVideoUrl(url) {
+  if (!url) return false;
+  return /\.(mp4|webm|ogg|ogv|mov|m4v)(\?.*)?$/i.test(url.trim());
+}
+
 function LectureDetail({ lecture, user, onBack }) {
   const [quizzes, setQuizzes] = useState([]);
   const [feedback, setFeedback] = useState(null);
@@ -964,8 +1042,16 @@ function LectureDetail({ lecture, user, onBack }) {
   const [error, setError] = useState("");
   const canModerate = user.role === "admin" || user.role === "lecturer";
   const embed = toEmbedUrl(lecture.video_url);
+  const directVideo =
+    !embed && isDirectVideoUrl(lecture.video_url) ? lecture.video_url : null;
+  const videoRef = useRef(null);
 
   useWatchTimeTracker(lecture.id, user.role === "trainee" && !!embed);
+  useVideoElementWatchTime(
+    lecture.id,
+    videoRef,
+    user.role === "trainee" && !!directVideo,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1019,7 +1105,12 @@ function LectureDetail({ lecture, user, onBack }) {
           <iframe src={embed} title="video" allowFullScreen />
         </div>
       )}
-      {!embed && lecture.video_url && (
+      {directVideo && (
+        <div className="video-wrap">
+          <video ref={videoRef} src={directVideo} controls preload="metadata" />
+        </div>
+      )}
+      {!embed && !directVideo && lecture.video_url && (
         <p>
           <a href={lecture.video_url} target="_blank" rel="noreferrer">
             ▶ مشاهدة الفيديو
@@ -1859,7 +1950,13 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-title">
-          <span className="logo">🎓</span>
+          <span className="header-logo-badge">
+            <img
+              src={PROGRAM_LOGO}
+              alt="شعار برنامج تطوير الرعاية الأولية والصحة المجتمعية"
+              className="header-logo-img"
+            />
+          </span>
           <span>{PLATFORM_NAME}</span>
         </div>
         <nav className="app-header-nav">
