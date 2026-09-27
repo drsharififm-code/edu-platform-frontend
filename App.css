@@ -315,6 +315,7 @@ textarea {
 }
 .app-header-nav .tab {
   color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
 }
 .app-header-nav .tab.active {
   background: rgba(255, 255, 255, 0.2);
@@ -583,15 +584,325 @@ textarea {
   margin-top: 4px;
 }
 
+/* ---------- Form helpers ---------- */
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.file-btn {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ---------- Tables scroll horizontally on small screens ---------- */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.table-wrap .data-table th {
+  background: #f8fafc;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.table-wrap .data-table td {
+  white-space: nowrap;
+}
+
+/* ---------- Report ---------- */
+.report-toolbar {
+  align-items: flex-end;
+}
+.report-filters,
+.report-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.report-filters label {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 13px;
+}
+.report-filters input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+}
+
+/* ---------- Slides editor (lecturer) ---------- */
+.slides-editor,
+.short-quiz-section {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  background: #fbfdfc;
+}
+.slides-editor-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 8px 0;
+}
+.slides-editor-row select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.narration-list {
+  padding-inline-start: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.narration-list li strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.narration-list textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.short-quiz-builder .option-row input[type="text"],
+.short-quiz-builder .option-row input:not([type]) {
+  flex: 1;
+}
+
+/* ---------- Slide player (trainee) ---------- */
+.section-title {
+  font-size: 17px;
+  margin: 20px 0 10px;
+  color: var(--primary-dark);
+}
+.slide-player {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.slide-stage {
+  position: relative;
+  padding-top: 56.25%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 55%, #134e4a 100%);
+  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.25);
+}
+.slide-card {
+  position: absolute;
+  inset: 0;
+  padding: 5% 6%;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.slide-card.ltr {
+  text-align: left;
+}
+.slide-title {
+  font-size: clamp(18px, 3.2vw, 30px);
+  margin: 0 0 14px;
+  line-height: 1.35;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 10px;
+}
+.slide-bullets {
+  margin: 0;
+  padding-inline-start: 1.2em;
+  font-size: clamp(14px, 2vw, 20px);
+  line-height: 1.7;
+}
+.slide-bullets li::marker {
+  color: var(--accent);
+}
+.slide-number {
+  margin-top: auto;
+  align-self: flex-end;
+  font-size: 12px;
+  opacity: 0.75;
+  padding-top: 8px;
+}
+.slide-progress {
+  height: 5px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.slide-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+.slide-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.slide-controls .slide-play {
+  flex: 1;
+  max-width: 320px;
+}
+
+.quiz-locked {
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+}
+
+/* ---------- Mobile ---------- */
 @media (max-width: 640px) {
-  .form-grid {
+  .form-grid,
+  .form-row-2 {
     grid-template-columns: 1fr;
+  }
+  /* 16px inputs prevent iOS from zooming on focus */
+  .form input,
+  .form select,
+  .form textarea,
+  .form-inline input,
+  .toolbar select,
+  .report-filters input,
+  .link-row input {
+    font-size: 16px;
+  }
+  .auth-shell {
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .auth-card {
+    padding: 20px 16px;
+    border-radius: 12px;
+  }
+  .auth-title {
+    font-size: 17px;
   }
   .app-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .app-header-title {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .app-header-nav {
+    order: 3;
+  }
+  .app-header-nav .tab {
+    flex: 1;
   }
   .app-header-user {
     align-items: flex-start;
+  }
+  .app-header-user-row {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .app-header-username {
+    font-size: 13px;
+  }
+  .app-header-user .btn {
+    margin-inline-start: auto;
+  }
+  .app-main {
+    padding: 12px;
+  }
+  .panel {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  .panel h2 {
+    font-size: 19px;
+  }
+  .sub-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .sub-tabs .tab {
+    white-space: nowrap;
+  }
+  .toolbar label {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .lecture-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .stat-value {
+    font-size: 22px;
+  }
+  .link-row {
+    flex-wrap: wrap;
+  }
+  .link-row input {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+  .form-actions .btn {
+    width: 100%;
+  }
+  .btn {
+    min-height: 40px;
+  }
+  .btn-small {
+    min-height: 34px;
+  }
+  .slide-stage {
+    padding-top: 0;
+    min-height: 62vw;
+  }
+  .slide-card {
+    position: relative;
+    min-height: 62vw;
+    padding: 18px 16px;
+  }
+  .slide-controls .btn-small {
+    padding: 6px 8px;
+  }
+  .report-filters,
+  .report-actions {
+    width: 100%;
+  }
+  .report-filters label {
+    flex: 1;
+  }
+  .data-table {
+    font-size: 13px;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 8px;
   }
 }

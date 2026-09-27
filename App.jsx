@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken } from "./api.js";
+import { SlidePlayer, parsePptx, VOICE_OPTIONS, defaultNarration } from "./slides.jsx";
 
 const PROGRAM_LOGO =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIQAAAB6CAMAAABJAgv8AAABIFBMVEX+/v6YpKbO6NS3xsfN19bl6uuttrjY5uVRpmsXOjijqq2q17bEycwwdk1PmGoXZTfa9eYnR0ZyuYeWx6YtaEczVlPQ89c5mldFmVlRh2ZLaGduh4h2lo+X1aqoyLO418mHxphzp4aIt5iVt6top3pWdXO1vcFmmXmEmpm45cUaQ0J2xI5YsnOIqJWt4boZXTQjWzckZDyXnqMaQT1Fd1bW3eE3oVpGhFxFpFxotHwiOzs4gllDWVlje3sdaEAiQD04mmNjhnlEZVzj+t06ZWM5omSN0ZcVP0Q8hGBesYAbVlJJX2JmeoC58scAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADfPnBAAAAYHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8AAAAAAAAAAAAAAAAAAAAAAAAEoWZuAAAJGUlEQVR42u1aaXfiuBLFli1veLfBNph9h7CEkKWT7vQ+M+/N/P+/82QCRpZEeizmnfc+UCd9EgyRrqpu3SpVulK52tWudrWrXe1qV7va1a52tav935gjGi1DvGSF2rLjPXleWuNdQOw+2/bKtu+63DjSRT1SkdUjj2+NfrAymz2/NzBXwQ3fKbzPqj91Kk7N8CLV4IjEYHXnH35u3a0GDkcoPKuTv1iqUav0Cl3bOjlQUe3m/rvRG1txHFvNvnTm8KIkSeLbb3o/UhzSwirrC38dF16PNz2xY5m2bZuZZd+7bWJ/Y75Q7+vI7u9Vb278rHeK76tqOXrW7r4WieTcBeZ6E/da+8ei1Oo+rFbx6Wiiv/hx/0P1Op3USP2Op1pRtCD2TCO/pCN6JE1te1zE1R5vjo+mXlRX53gyO6kapSTN1EEpEFZAZpT4bJO4Km3LNtHhlp5leWS8l48qlZQdtUyeymZM47IZeeqbm8H8s9WhFzfuF/Sz+rRMgptjOl1WLLEQ45XJ1CE2CONSEHb/jJ6MWc+n0aUgFPML9Wxgn1lhYLNQ1B5VSt9a9WUZYj7ckSs4z8/nsnwc9BhPvYgigFdOKAZr8tjG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";
 
-const PLATFORM_NAME = "منصة التعليم الالكتروني بطب الأسرة و المجتمع";
+const PLATFORM_NAME = "منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع";
 const COPYRIGHT = "© Dr.sharifi.edu";
 
 const ROLE_LABELS = { trainee: "متدرب", lecturer: "محاضر", admin: "مشرف" };
@@ -37,37 +38,57 @@ function CopyrightMark({ className = "" }) {
   return <div className={`copyright-mark ${className}`}>{COPYRIGHT}</div>;
 }
 
-/* ---------------- date helpers ---------------- */
+/* ---------------- date helpers (Gregorian calendar) ---------------- */
+
+// All dates are shown in the Gregorian (ميلادي) calendar, Saudi time.
+const DATE_LOCALE = "ar-SA-u-ca-gregory-nu-latn";
+const TZ = "Asia/Riyadh";
+
+function parseDbDate(s) {
+  if (!s) return null;
+  const str = String(s);
+  // D1 stores UTC as "YYYY-MM-DD HH:MM:SS"; ISO strings may already carry a zone.
+  const iso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(str) ? str : str.replace(" ", "T") + "Z";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 function fmtDate(s) {
   if (!s) return "-";
-  try {
-    const d = new Date(String(s).replace(" ", "T") + "Z");
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleDateString("ar-SA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  } catch (e) {
-    return s;
-  }
+  const d = parseDbDate(s);
+  if (!d) return s;
+  return d.toLocaleDateString(DATE_LOCALE, {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 function fmtDateTime(s) {
   if (!s) return "-";
-  try {
-    const d = new Date(String(s).replace(" ", "T") + "Z");
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleString("ar-SA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch (e) {
-    return s;
-  }
+  const d = parseDbDate(s);
+  if (!d) return s;
+  return d.toLocaleString(DATE_LOCALE, {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+// Plain calendar day stored as "YYYY-MM-DD" (e.g. availability date) → DD/MM/YYYY
+function fmtDay(s) {
+  if (!s) return "-";
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+// Today in Saudi time as "YYYY-MM-DD"
+function todayLocal() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+}
+function isLectureExpired(lecture) {
+  return !!lecture.available_until && lecture.available_until < todayLocal();
 }
 
 /* ---------------- Auth ---------------- */
@@ -84,10 +105,13 @@ function AuthPage({ onLoggedIn }) {
     keepSignedIn: true,
   });
   const [signupForm, setSignupForm] = useState({
-    name: "",
+    first_name: "",
+    last_name: "",
+    employee_id: "",
+    email: "",
+    hospital: "",
     username: "",
     password: "",
-    department: "",
     specialty: "",
     job_title: "",
   });
@@ -112,9 +136,20 @@ function AuthPage({ onLoggedIn }) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    const fn = signupForm.first_name.trim();
+    const ln = signupForm.last_name.trim();
+    if (!fn || !ln) {
+      setError("الرجاء إدخال الاسم الأول واسم العائلة على الأقل.");
+      return;
+    }
     setLoading(true);
     try {
-      const data = await api.signup(signupForm);
+      const data = await api.signup({
+        ...signupForm,
+        first_name: fn,
+        last_name: ln,
+        name: `${fn} ${ln}`,
+      });
       setSuccess(data.message);
       setMode("login");
       setLoginForm((f) => ({ ...f, username: signupForm.username }));
@@ -162,6 +197,9 @@ function AuthPage({ onLoggedIn }) {
               اسم المستخدم
               <input
                 required
+                dir="ltr"
+                autoComplete="username"
+                autoCapitalize="none"
                 value={loginForm.username}
                 onChange={(e) =>
                   setLoginForm({ ...loginForm, username: e.target.value })
@@ -199,20 +237,72 @@ function AuthPage({ onLoggedIn }) {
           </form>
         ) : (
           <form onSubmit={handleSignup} className="form">
+            <div className="form-row-2">
+              <label>
+                الاسم الأول *
+                <input
+                  required
+                  autoComplete="given-name"
+                  value={signupForm.first_name}
+                  onChange={(e) =>
+                    setSignupForm({ ...signupForm, first_name: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                اسم العائلة *
+                <input
+                  required
+                  autoComplete="family-name"
+                  value={signupForm.last_name}
+                  onChange={(e) =>
+                    setSignupForm({ ...signupForm, last_name: e.target.value })
+                  }
+                />
+              </label>
+            </div>
             <label>
-              الاسم الكامل
+              الرقم الوظيفي *
               <input
                 required
-                value={signupForm.name}
+                inputMode="numeric"
+                value={signupForm.employee_id}
                 onChange={(e) =>
-                  setSignupForm({ ...signupForm, name: e.target.value })
+                  setSignupForm({ ...signupForm, employee_id: e.target.value })
                 }
               />
             </label>
             <label>
-              اسم المستخدم
+              البريد الإلكتروني *
               <input
                 required
+                type="email"
+                dir="ltr"
+                autoComplete="email"
+                placeholder="name@example.com"
+                value={signupForm.email}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, email: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              اسم المستشفى / المنشأة *
+              <input
+                required
+                value={signupForm.hospital}
+                onChange={(e) =>
+                  setSignupForm({ ...signupForm, hospital: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              اسم المستخدم *
+              <input
+                required
+                dir="ltr"
+                autoComplete="username"
+                autoCapitalize="none"
                 value={signupForm.username}
                 onChange={(e) =>
                   setSignupForm({ ...signupForm, username: e.target.value })
@@ -220,43 +310,37 @@ function AuthPage({ onLoggedIn }) {
               />
             </label>
             <label>
-              كلمة المرور
+              كلمة المرور *
               <input
                 required
                 type="password"
+                autoComplete="new-password"
                 value={signupForm.password}
                 onChange={(e) =>
                   setSignupForm({ ...signupForm, password: e.target.value })
                 }
               />
             </label>
-            <label>
-              القسم / الجهة
-              <input
-                value={signupForm.department}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, department: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              التخصص
-              <input
-                value={signupForm.specialty}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, specialty: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              المسمى الوظيفي
-              <input
-                value={signupForm.job_title}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, job_title: e.target.value })
-                }
-              />
-            </label>
+            <div className="form-row-2">
+              <label>
+                التخصص
+                <input
+                  value={signupForm.specialty}
+                  onChange={(e) =>
+                    setSignupForm({ ...signupForm, specialty: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                المسمى الوظيفي
+                <input
+                  value={signupForm.job_title}
+                  onChange={(e) =>
+                    setSignupForm({ ...signupForm, job_title: e.target.value })
+                  }
+                />
+              </label>
+            </div>
             <p className="hint">
               سيتم إنشاء حسابك كمتدرب، وينتظر موافقة المشرف قبل تفعيله.
             </p>
@@ -281,6 +365,9 @@ function ProfilePage({ user, onUpdated }) {
   const [form, setForm] = useState({
     name: user.name || "",
     password: "",
+    employee_id: user.employee_id || "",
+    email: user.email || "",
+    hospital: user.hospital || "",
     department: user.department || "",
     specialty: user.specialty || "",
     job_title: user.job_title || "",
@@ -331,6 +418,30 @@ function ProfilePage({ user, onUpdated }) {
           />
         </label>
         <label>
+          الرقم الوظيفي
+          <input
+            inputMode="numeric"
+            value={form.employee_id}
+            onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
+          />
+        </label>
+        <label>
+          البريد الإلكتروني
+          <input
+            type="email"
+            dir="ltr"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </label>
+        <label>
+          اسم المستشفى / المنشأة
+          <input
+            value={form.hospital}
+            onChange={(e) => setForm({ ...form, hospital: e.target.value })}
+          />
+        </label>
+        <label>
           القسم / الجهة
           <input
             value={form.department}
@@ -363,6 +474,194 @@ function ProfilePage({ user, onUpdated }) {
 
 /* ---------------- Lecture form (create/edit) ---------------- */
 
+const emptyMcq = () => ({
+  question_text: "",
+  options: ["", "", "", ""],
+  correct: 0,
+});
+
+function ShortQuizBuilder({ questions, setQuestions }) {
+  function update(qi, patch) {
+    setQuestions((qs) => qs.map((q, i) => (i === qi ? { ...q, ...patch } : q)));
+  }
+  function updateOption(qi, oi, value) {
+    setQuestions((qs) =>
+      qs.map((q, i) =>
+        i === qi
+          ? { ...q, options: q.options.map((o, j) => (j === oi ? value : o)) }
+          : q,
+      ),
+    );
+  }
+  return (
+    <div className="short-quiz-builder">
+      {questions.map((q, qi) => (
+        <div className="question-card" key={qi}>
+          <label>
+            السؤال {qi + 1}
+            <input
+              value={q.question_text}
+              placeholder="نص السؤال"
+              onChange={(e) => update(qi, { question_text: e.target.value })}
+            />
+          </label>
+          <div className="options-list">
+            {q.options.map((opt, oi) => (
+              <div className="option-row" key={oi}>
+                <input
+                  type="radio"
+                  name={`mcq-correct-${qi}`}
+                  checked={q.correct === oi}
+                  onChange={() => update(qi, { correct: oi })}
+                  title="الإجابة الصحيحة"
+                />
+                <input
+                  placeholder={`الخيار ${["أ", "ب", "ج", "د"][oi]}`}
+                  value={opt}
+                  onChange={(e) => updateOption(qi, oi, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="hint">اختر الدائرة بجانب الإجابة الصحيحة.</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function validateShortQuiz(questions) {
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    if (!q.question_text.trim()) return `الرجاء كتابة نص السؤال ${i + 1}.`;
+    const filled = q.options.filter((o) => o.trim()).length;
+    if (filled < 2) return `السؤال ${i + 1}: أدخل خيارين على الأقل.`;
+    if (!q.options[q.correct]?.trim())
+      return `السؤال ${i + 1}: الإجابة الصحيحة المختارة فارغة.`;
+  }
+  return "";
+}
+
+function shortQuizPayload(lectureId, title, questions) {
+  return {
+    lecture_id: lectureId,
+    title: `اختبار قصير: ${title}`,
+    pass_score: 60,
+    allow_retake: true,
+    questions: questions.map((q) => {
+      const options = [];
+      q.options.forEach((o, i) => {
+        if (o.trim()) options.push({ text: o.trim(), correct: i === q.correct });
+      });
+      return { question_text: q.question_text.trim(), type: "single", options };
+    }),
+  };
+}
+
+function SlidesEditor({ deck, setDeck }) {
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setParsing(true);
+    try {
+      const slides = await parsePptx(file);
+      setDeck({ voice: deck?.voice || "onyx", file_name: file.name, slides });
+      setOpen(true);
+    } catch (err) {
+      setError(err.message || "تعذّرت قراءة الملف.");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function updateNarration(i, value) {
+    setDeck((d) => ({
+      ...d,
+      slides: d.slides.map((s, j) => (j === i ? { ...s, narration: value } : s)),
+    }));
+  }
+
+  return (
+    <div className="slides-editor">
+      <div className="links-header">
+        <span>🎙 عرض الشرائح بصوت الذكاء الاصطناعي</span>
+      </div>
+      <p className="hint">
+        ارفع ملف PowerPoint (‎.pptx) وستُعرض الشرائح للمتدرب واحدة تلو الأخرى مع
+        قراءة صوتية. تُقرأ ملاحظات المتحدث (Speaker Notes) إن وُجدت، وإلا يُقرأ نص
+        الشريحة، ويمكنك تعديل النص المقروء لكل شريحة.
+      </p>
+      <ErrorBox message={error} />
+      <div className="slides-editor-row">
+        <label className="btn btn-small file-btn">
+          {parsing ? "جارِ قراءة الملف…" : deck ? "استبدال الملف" : "📤 رفع ملف PowerPoint"}
+          <input
+            type="file"
+            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            onChange={handleFile}
+            disabled={parsing}
+            hidden
+          />
+        </label>
+        {deck && (
+          <>
+            <select
+              value={deck.voice}
+              onChange={(e) => setDeck({ ...deck, voice: e.target.value })}
+              aria-label="نوع الصوت"
+            >
+              {VOICE_OPTIONS.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-danger btn-small"
+              onClick={() => setDeck(null)}
+            >
+              إزالة الشرائح
+            </button>
+          </>
+        )}
+      </div>
+      {deck && (
+        <div className="slides-summary">
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? "▲" : "▼"} {deck.file_name || "الشرائح"} — {deck.slides.length} شريحة
+          </button>
+          {open && (
+            <ol className="narration-list">
+              {deck.slides.map((s, i) => (
+                <li key={i}>
+                  <strong>{s.title || `شريحة ${i + 1}`}</strong>
+                  <textarea
+                    rows={3}
+                    value={s.narration}
+                    placeholder={defaultNarration(s)}
+                    onChange={(e) => updateNarration(i, e.target.value)}
+                  />
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LectureForm({ programs, initial, onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     id: initial?.id,
@@ -372,10 +671,23 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     topic: initial?.topic || "",
     video_url: initial?.video_url || "",
     slides_url: initial?.slides_url || "",
+    available_until: initial?.available_until || "",
     extra_links: initial?.extra_links?.length ? initial.extra_links : [],
   }));
+  const [deck, setDeck] = useState(initial?.slides || null);
+  const [hasQuiz, setHasQuiz] = useState(false);
+  const [addQuiz, setAddQuiz] = useState(true);
+  const [mcqs, setMcqs] = useState([emptyMcq(), emptyMcq(), emptyMcq()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!initial?.id) return;
+    api
+      .getQuizzes(initial.id)
+      .then((d) => setHasQuiz(d.quizzes.length > 0))
+      .catch(() => {});
+  }, [initial?.id]);
 
   function addLink() {
     setForm((f) => ({
@@ -397,15 +709,30 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     }));
   }
 
+  const quizActive = addQuiz && !hasQuiz;
+
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    if (quizActive) {
+      const msg = validateShortQuiz(mcqs);
+      if (msg) {
+        setError(msg);
+        return;
+      }
+    }
+    setLoading(true);
     try {
+      const payload = { ...form, slides: deck };
+      let lectureId = form.id;
       if (form.id) {
-        await api.updateLecture(form);
+        await api.updateLecture(payload);
       } else {
-        await api.createLecture(form);
+        const res = await api.createLecture(payload);
+        lectureId = res.id;
+      }
+      if (quizActive && lectureId) {
+        await api.createQuiz(shortQuizPayload(lectureId, form.title, mcqs));
       }
       onSaved();
     } catch (err) {
@@ -446,6 +773,22 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
           onChange={(e) => setForm({ ...form, topic: e.target.value })}
         />
       </label>
+      <label>
+        متاحة للمتدربين حتى تاريخ (ميلادي)
+        <input
+          type="date"
+          value={form.available_until}
+          min={form.id ? undefined : todayLocal()}
+          onChange={(e) =>
+            setForm({ ...form, available_until: e.target.value })
+          }
+        />
+        <span className="hint">
+          {form.available_until
+            ? `تختفي المحاضرة عن المتدربين بعد ${fmtDay(form.available_until)}`
+            : "اتركه فارغاً لإتاحتها بدون تاريخ انتهاء"}
+        </span>
+      </label>
       <label className="full">
         الوصف
         <textarea
@@ -457,19 +800,25 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
       <label>
         رابط الفيديو (يوتيوب أو غيره)
         <input
+          dir="ltr"
           value={form.video_url}
           onChange={(e) => setForm({ ...form, video_url: e.target.value })}
           placeholder="https://..."
         />
       </label>
       <label>
-        رابط الشرائح (PDF / PowerPoint)
+        رابط ملف الشرائح للتنزيل (اختياري)
         <input
+          dir="ltr"
           value={form.slides_url}
           onChange={(e) => setForm({ ...form, slides_url: e.target.value })}
           placeholder="https://..."
         />
       </label>
+
+      <div className="full">
+        <SlidesEditor deck={deck} setDeck={setDeck} />
+      </div>
 
       <div className="full">
         <div className="links-header">
@@ -486,6 +835,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
               onChange={(e) => updateLink(idx, "label", e.target.value)}
             />
             <input
+              dir="ltr"
               placeholder="https://..."
               value={link.url}
               onChange={(e) => updateLink(idx, "url", e.target.value)}
@@ -499,6 +849,29 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="full short-quiz-section">
+        <div className="links-header">
+          <span>📝 اختبار قصير بعد المحاضرة (3 أسئلة اختيار من متعدد)</span>
+        </div>
+        {hasQuiz ? (
+          <p className="hint">
+            لهذه المحاضرة اختبار مسبق. يمكنك إدارته من زر "إدارة الاختبار".
+          </p>
+        ) : (
+          <>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={addQuiz}
+                onChange={(e) => setAddQuiz(e.target.checked)}
+              />
+              إضافة اختبار قصير يظهر للمتدرب بعد انتهاء الفيديو أو عرض الشرائح
+            </label>
+            {addQuiz && <ShortQuizBuilder questions={mcqs} setQuestions={setMcqs} />}
+          </>
+        )}
       </div>
 
       <p className="hint full">
@@ -737,7 +1110,7 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
 
 /* ---------------- Quiz taking (trainee) ---------------- */
 
-function TakeQuiz({ quiz, onSubmitted }) {
+function TakeQuiz({ quiz, onSubmitted, alreadyAttempted }) {
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -788,6 +1161,11 @@ function TakeQuiz({ quiz, onSubmitted }) {
   return (
     <div className="quiz-box">
       <h4>{quiz.title}</h4>
+      {alreadyAttempted && (
+        <p className="hint">
+          سبق لك أداء هذا الاختبار{quiz.allow_retake ? "، ويمكنك إعادة المحاولة." : "."}
+        </p>
+      )}
       <ErrorBox message={error} />
       {quiz.questions.map((q, qi) => (
         <div className="question-card" key={q.id}>
@@ -1023,7 +1401,7 @@ function useVideoElementWatchTime(lectureId, videoRef, enabled) {
 function toEmbedUrl(url) {
   if (!url) return null;
   const yt = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/,
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/))([\w-]+)/,
   );
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
   return null;
@@ -1034,24 +1412,110 @@ function isDirectVideoUrl(url) {
   return /\.(mp4|webm|ogg|ogv|mov|m4v)(\?.*)?$/i.test(url.trim());
 }
 
+// Loads the YouTube IFrame API once and resolves with window.YT
+let ytApiPromise = null;
+function loadYouTubeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prev && prev();
+      resolve(window.YT);
+    };
+    const s = document.createElement("script");
+    s.src = "https://www.youtube.com/iframe_api";
+    s.async = true;
+    document.head.appendChild(s);
+  });
+  return ytApiPromise;
+}
+
+// Calls onEnded when the embedded YouTube video finishes
+function useYouTubeEnded(iframeRef, enabled, onEnded) {
+  const cbRef = useRef(onEnded);
+  cbRef.current = onEnded;
+  useEffect(() => {
+    if (!enabled || !iframeRef.current) return undefined;
+    let player = null;
+    let cancelled = false;
+    loadYouTubeApi().then((YT) => {
+      if (cancelled || !iframeRef.current) return;
+      player = new YT.Player(iframeRef.current, {
+        events: {
+          onStateChange: (e) => {
+            if (e.data === 0) cbRef.current && cbRef.current();
+          },
+        },
+      });
+    });
+    return () => {
+      // Don't call player.destroy(): it removes the iframe that React owns.
+      cancelled = true;
+      player = null;
+    };
+  }, [enabled, iframeRef]);
+}
+
+const doneKey = (username, lectureId) => `edu_done_${username}_${lectureId}`;
+function readDone(username, lectureId) {
+  try {
+    return localStorage.getItem(doneKey(username, lectureId)) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+function writeDone(username, lectureId) {
+  try {
+    localStorage.setItem(doneKey(username, lectureId), "1");
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 function LectureDetail({ lecture, user, onBack }) {
   const [quizzes, setQuizzes] = useState([]);
   const [feedback, setFeedback] = useState(null);
-  const [attempts, setAttempts] = useState(null);
+  const [attemptedQuizIds, setAttemptedQuizIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const isTrainee = user.role === "trainee";
   const canModerate = user.role === "admin" || user.role === "lecturer";
   const embed = toEmbedUrl(lecture.video_url);
   const directVideo =
     !embed && isDirectVideoUrl(lecture.video_url) ? lecture.video_url : null;
+  const externalVideo = !embed && !directVideo && lecture.video_url;
+  const hasSlides = !!lecture.slides?.slides?.length;
   const videoRef = useRef(null);
+  const iframeRef = useRef(null);
+  const quizRef = useRef(null);
+  const expired = isLectureExpired(lecture);
 
-  useWatchTimeTracker(lecture.id, user.role === "trainee" && !!embed);
+  // Quiz unlocks after the video ends or the slide show finishes.
+  const hasTrackableContent = !!(embed || directVideo || hasSlides);
+  const [contentDone, setContentDone] = useState(
+    () => !hasTrackableContent && !externalVideo ? true : readDone(user.username, lecture.id),
+  );
+  const markDone = useCallback(() => {
+    writeDone(user.username, lecture.id);
+    setContentDone((was) => {
+      if (!was && isTrainee) {
+        setTimeout(() => {
+          quizRef.current &&
+            quizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 150);
+      }
+      return true;
+    });
+  }, [user.username, lecture.id, isTrainee]);
+
+  useWatchTimeTracker(lecture.id, isTrainee && !!embed && !expired);
   useVideoElementWatchTime(
     lecture.id,
     videoRef,
-    user.role === "trainee" && !!directVideo,
+    isTrainee && !!directVideo && !expired,
   );
+  useYouTubeEnded(iframeRef, !!embed, markDone);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1060,6 +1524,16 @@ function LectureDetail({ lecture, user, onBack }) {
       await api.viewLecture(lecture.id);
       const q = await api.getQuizzes(lecture.id);
       setQuizzes(q.quizzes);
+      if (isTrainee) {
+        try {
+          const a = await api.getMyAttempts();
+          const ids = (a.attempts || []).map((x) => x.quiz_id);
+          setAttemptedQuizIds(ids);
+          if (q.quizzes.some((qz) => ids.includes(qz.id))) setContentDone(true);
+        } catch (e) {
+          /* ignore */
+        }
+      }
       if (
         canModerate &&
         (lecture.lecturer_username === user.username || user.role === "admin")
@@ -1082,6 +1556,22 @@ function LectureDetail({ lecture, user, onBack }) {
     load();
   }, [load]);
 
+  if (isTrainee && expired) {
+    return (
+      <div className="panel">
+        <button className="btn btn-small" onClick={onBack}>
+          → رجوع
+        </button>
+        <h2>{lecture.title}</h2>
+        <ErrorBox message={`انتهت فترة إتاحة هذه المحاضرة بتاريخ ${fmtDay(lecture.available_until)}.`} />
+      </div>
+    );
+  }
+
+  const embedSrc = embed
+    ? `${embed}?enablejsapi=1&rel=0&playsinline=1&origin=${encodeURIComponent(window.location.origin)}`
+    : null;
+
   return (
     <div className="panel">
       <button className="btn btn-small" onClick={onBack}>
@@ -1093,6 +1583,11 @@ function LectureDetail({ lecture, user, onBack }) {
         <Badge tone={lecture.status === "approved" ? "success" : "warning"}>
           {STATUS_LABELS[lecture.status]}
         </Badge>
+        {lecture.available_until && (
+          <Badge tone={expired ? "danger" : "info"}>
+            {expired ? "انتهت الإتاحة" : "متاحة حتى"} {fmtDay(lecture.available_until)}
+          </Badge>
+        )}
         <span className="muted">المحاضر: {lecture.lecturer_name}</span>
         <span className="muted">👁 {lecture.view_count}</span>
       </div>
@@ -1100,27 +1595,58 @@ function LectureDetail({ lecture, user, onBack }) {
         <p className="description">{lecture.description}</p>
       )}
 
-      {embed && (
+      {embedSrc && (
         <div className="video-wrap">
-          <iframe src={embed} title="video" allowFullScreen />
+          <iframe
+            ref={iframeRef}
+            src={embedSrc}
+            title="video"
+            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
         </div>
       )}
       {directVideo && (
         <div className="video-wrap">
-          <video ref={videoRef} src={directVideo} controls preload="metadata" />
+          <video
+            ref={videoRef}
+            src={directVideo}
+            controls
+            playsInline
+            preload="metadata"
+            onEnded={markDone}
+          />
         </div>
       )}
-      {!embed && !directVideo && lecture.video_url && (
+      {externalVideo && (
         <p>
-          <a href={lecture.video_url} target="_blank" rel="noreferrer">
+          <a
+            href={lecture.video_url}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-small"
+          >
             ▶ مشاهدة الفيديو
           </a>
         </p>
       )}
+
+      {hasSlides && (
+        <div className="slides-section">
+          <h3 className="section-title">🎙 عرض الشرائح الصوتي</h3>
+          <SlidePlayer
+            deck={lecture.slides}
+            lectureId={lecture.id}
+            trackTime={isTrainee}
+            onComplete={markDone}
+          />
+        </div>
+      )}
+
       {lecture.slides_url && (
         <p>
           <a href={lecture.slides_url} target="_blank" rel="noreferrer">
-            📑 عرض الشرائح
+            📑 تنزيل ملف الشرائح
           </a>
         </p>
       )}
@@ -1139,18 +1665,39 @@ function LectureDetail({ lecture, user, onBack }) {
       {loading && <Spinner />}
       <ErrorBox message={error} />
 
+      <div ref={quizRef} />
+      {!loading && isTrainee && quizzes.length > 0 && !contentDone && (
+        <div className="quiz-locked">
+          <strong>📝 الاختبار القصير</strong>
+          <p className="muted">
+            {hasTrackableContent
+              ? "سيظهر الاختبار بعد انتهاء الفيديو أو عرض الشرائح."
+              : "بعد مشاهدة الفيديو اضغط الزر أدناه لبدء الاختبار."}
+          </p>
+          {externalVideo && !hasTrackableContent && (
+            <button className="btn btn-small btn-success" onClick={markDone}>
+              ✔ أنهيت المشاهدة — ابدأ الاختبار
+            </button>
+          )}
+        </div>
+      )}
+
       {!loading &&
+        (canModerate || contentDone) &&
         quizzes.map((quiz) => (
           <div key={quiz.id}>
-            {user.role === "trainee" ? (
-              <TakeQuiz quiz={quiz} />
+            {isTrainee ? (
+              <TakeQuiz
+                quiz={quiz}
+                alreadyAttempted={attemptedQuizIds.includes(quiz.id)}
+              />
             ) : (
               <QuizAnswerKey quiz={quiz} />
             )}
           </div>
         ))}
 
-      {user.role === "trainee" && <FeedbackForm lectureId={lecture.id} />}
+      {isTrainee && contentDone && <FeedbackForm lectureId={lecture.id} />}
 
       {feedback && (
         <div className="panel-sub">
@@ -1195,6 +1742,13 @@ function LectureCard({
           <Badge tone={lecture.status === "approved" ? "success" : "warning"}>
             {STATUS_LABELS[lecture.status]}
           </Badge>
+          {lecture.slides?.slides?.length > 0 && <Badge>🎙 شرائح صوتية</Badge>}
+          {lecture.available_until && (
+            <Badge tone={isLectureExpired(lecture) ? "danger" : "default"}>
+              {isLectureExpired(lecture) ? "انتهت" : "حتى"}{" "}
+              {fmtDay(lecture.available_until)}
+            </Badge>
+          )}
         </div>
         <p className="muted">
           المحاضر: {lecture.lecturer_name} · 👁 {lecture.view_count}
@@ -1506,11 +2060,16 @@ function UsersManagement() {
   return (
     <div>
       <ErrorBox message={error} />
+      <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
             <th>الاسم</th>
             <th>اسم المستخدم</th>
+            <th>الرقم الوظيفي</th>
+            <th>البريد الإلكتروني</th>
+            <th>المستشفى</th>
+            <th>تاريخ التسجيل</th>
             <th>الدور</th>
             <th>الحالة</th>
             <th>إجراءات</th>
@@ -1521,6 +2080,10 @@ function UsersManagement() {
             <tr key={u.username}>
               <td>{u.name}</td>
               <td>{u.username}</td>
+              <td>{u.employee_id || "-"}</td>
+              <td dir="ltr">{u.email || "-"}</td>
+              <td>{u.hospital || "-"}</td>
+              <td>{fmtDate(u.created_at)}</td>
               <td>
                 <select
                   value={u.role}
@@ -1568,6 +2131,7 @@ function UsersManagement() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -1733,6 +2297,8 @@ function LecturesModeration({ user, onOpen }) {
 
 function AttendanceReport() {
   const [rows, setRows] = useState([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -1740,90 +2306,119 @@ function AttendanceReport() {
     setLoading(true);
     setError("");
     try {
-      const data = await api.getAdminReport();
+      const data = await api.getAdminReport({ from, to });
       setRows(data.report || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [from, to]);
   useEffect(() => {
     load();
   }, [load]);
 
+  const columns = [
+    ["اسم المحاضرة", (r) => r.lecture_title],
+    ["اسم المتدرب", (r) => r.trainee_name],
+    ["الرقم الوظيفي", (r) => r.employee_id || "-"],
+    ["المستشفى", (r) => r.hospital || "-"],
+    ["تاريخ نزول المحاضرة", (r) => fmtDate(r.lecture_created_at)],
+    ["متاحة حتى", (r) => fmtDay(r.available_until)],
+    ["تاريخ الحضور", (r) => fmtDateTime(r.first_viewed_at)],
+    ["آخر مشاهدة", (r) => fmtDateTime(r.last_viewed_at)],
+    ["مدة المشاهدة (دقيقة)", (r) => r.watched_minutes],
+    [
+      "نتيجة الاختبار",
+      (r) =>
+        r.best_score == null
+          ? "-"
+          : `${r.best_score}% ${r.passed ? "(ناجح)" : "(لم يجتز)"}`,
+    ],
+  ];
+
   function exportCsv() {
-    const header = [
-      "اسم المحاضرة",
-      "اسم المتدرب",
-      "تاريخ نزول المحاضرة",
-      "تاريخ الحضور",
-      "مدة المشاهدة (دقيقة)",
-    ];
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const lines = [header.map(esc).join(",")];
-    rows.forEach((r) => {
-      lines.push(
-        [
-          esc(r.lecture_title),
-          esc(r.trainee_name),
-          esc(fmtDate(r.lecture_created_at)),
-          esc(fmtDateTime(r.first_viewed_at)),
-          esc(r.watched_minutes),
-        ].join(","),
-      );
-    });
-    const blob = new Blob(["﻿" + lines.join("\n")], {
+    const esc = (v) =>
+      `"${String(v ?? "").replace(/[\u200e\u200f]/g, "").replace(/"/g, '""')}"`;
+    const lines = [columns.map(([h]) => esc(h)).join(",")];
+    rows.forEach((r) => lines.push(columns.map(([, f]) => esc(f(r))).join(",")));
+    const blob = new Blob(["\ufeff" + lines.join("\n")], {
       type: "text/csv;charset=utf-8;",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "تقرير_المتابعة.csv";
+    const range = from || to ? `_${from || "..."}_${to || "..."}` : "";
+    a.download = `تقرير_المتابعة${range}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <Spinner />;
   return (
     <div>
       <ErrorBox message={error} />
-      <div className="toolbar">
-        <span className="muted">{rows.length} سجل</span>
-        <button
-          className="btn btn-small"
-          onClick={exportCsv}
-          disabled={!rows.length}
-        >
-          ⬇ تصدير CSV
-        </button>
+      <div className="toolbar report-toolbar">
+        <div className="report-filters">
+          <label>
+            من تاريخ
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label>
+            إلى تاريخ
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
+          {(from || to) && (
+            <button
+              className="btn btn-small"
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+            >
+              مسح
+            </button>
+          )}
+        </div>
+        <div className="report-actions">
+          <span className="muted">
+            {rows.length} سجل · التواريخ بالتقويم الميلادي
+          </span>
+          <button
+            className="btn btn-small"
+            onClick={exportCsv}
+            disabled={!rows.length}
+          >
+            ⬇ تصدير CSV
+          </button>
+        </div>
       </div>
-      {rows.length === 0 && <p className="muted">لا توجد بيانات مشاهدة بعد.</p>}
-      {rows.length > 0 && (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>اسم المحاضرة</th>
-              <th>اسم المتدرب</th>
-              <th>تاريخ نزول المحاضرة</th>
-              <th>تاريخ الحضور</th>
-              <th>مدة المشاهدة (دقيقة)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td>{r.lecture_title}</td>
-                <td>{r.trainee_name}</td>
-                <td>{fmtDate(r.lecture_created_at)}</td>
-                <td>{fmtDateTime(r.first_viewed_at)}</td>
-                <td>{r.watched_minutes}</td>
+      {loading && <Spinner />}
+      {!loading && rows.length === 0 && (
+        <p className="muted">لا توجد بيانات مشاهدة في هذه الفترة.</p>
+      )}
+      {!loading && rows.length > 0 && (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {columns.map(([h]) => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  {columns.map(([h, f]) => (
+                    <td key={h}>{f(r)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -1957,7 +2552,7 @@ export default function App() {
               className="header-logo-img"
             />
           </span>
-          <span>{PLATFORM_NAME}</span>
+          <span className="app-header-name">{PLATFORM_NAME}</span>
         </div>
         <nav className="app-header-nav">
           <button
@@ -1975,7 +2570,7 @@ export default function App() {
         </nav>
         <div className="app-header-user">
           <div className="app-header-user-row">
-            <span>{user.name}</span>
+            <span className="app-header-username">{user.name}</span>
             <Badge tone="info">{ROLE_LABELS[user.role]}</Badge>
             <button className="btn btn-small" onClick={handleLogout}>
               خروج

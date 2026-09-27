@@ -63,6 +63,7 @@ export const api = {
 
   getQuizzes: (lectureId) => request(`/api/quizzes?lecture_id=${lectureId}`),
   createQuiz: (payload) => request('/api/quizzes', { method: 'POST', body: payload }),
+  deleteQuiz: (id) => request('/api/quizzes/delete', { method: 'POST', body: { id } }),
   attemptQuiz: (payload) => request('/api/quizzes/attempt', { method: 'POST', body: payload }),
   getMyAttempts: () => request('/api/quizzes/attempts?mine=1'),
   getQuizAttempts: (quizId) => request(`/api/quizzes/attempts?quiz_id=${quizId}`),
@@ -71,7 +72,36 @@ export const api = {
   getFeedback: (lectureId) => request(`/api/feedback?lecture_id=${lectureId}`),
 
   getStats: () => request('/api/stats'),
-  getAdminReport: () => request('/api/admin/report'),
+  getAdminReport: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    const q = qs.toString();
+    return request(`/api/admin/report${q ? `?${q}` : ''}`);
+  },
+
+  ttsStatus: () => request('/api/tts/status', { auth: false }),
+  // Returns an audio Blob, or throws an Error with .code === 'tts_not_configured'.
+  tts: async (text, voice) => {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ text, voice }),
+      });
+    } catch (e) {
+      throw new Error('تعذّر الاتصال بخدمة الصوت.');
+    }
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (e) { /* ignore */ }
+      const err = new Error(data.message || 'تعذّر توليد الصوت.');
+      err.code = data.code || (res.status === 404 ? 'tts_not_configured' : 'tts_error');
+      throw err;
+    }
+    return res.blob();
+  },
 };
 
 export { getToken };
