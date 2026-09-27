@@ -60,6 +60,7 @@ export const api = {
   deleteLecture: (id) => request('/api/lectures/delete', { method: 'POST', body: { id } }),
   viewLecture: (id) => request('/api/lectures/view', { method: 'POST', body: { id } }),
   heartbeatLecture: (id, seconds) => request('/api/lectures/heartbeat', { method: 'POST', body: { id, seconds } }),
+  slideProgress: (id, slide_index) => request('/api/lectures/slide-progress', { method: 'POST', body: { id, slide_index } }),
 
   getQuizzes: (lectureId) => request(`/api/quizzes?lecture_id=${lectureId}`),
   createQuiz: (payload) => request('/api/quizzes', { method: 'POST', body: payload }),

@@ -3,13 +3,17 @@ import JSZip from "jszip";
 import { api } from "./api.js";
 
 export const VOICE_OPTIONS = [
-  { value: "onyx", label: "صوت رجالي (عميق)" },
-  { value: "echo", label: "صوت رجالي (هادئ)" },
-  { value: "ash", label: "صوت رجالي (واضح)" },
-  { value: "nova", label: "صوت نسائي (حيوي)" },
-  { value: "coral", label: "صوت نسائي (دافئ)" },
-  { value: "shimmer", label: "صوت نسائي (ناعم)" },
+  { value: "m1", label: "صوت رجالي 1" },
+  { value: "m2", label: "صوت رجالي 2" },
+  { value: "f1", label: "صوت نسائي 1" },
+  { value: "f2", label: "صوت نسائي 2" },
 ];
+// Decks saved before the voice update used OpenAI voice names.
+const LEGACY_VOICES = { onyx: "m1", ash: "m1", echo: "m2", nova: "f1", coral: "f1", shimmer: "f2" };
+export function normalizeVoice(v) {
+  if (VOICE_OPTIONS.some((o) => o.value === v)) return v;
+  return LEGACY_VOICES[v] || "m1";
+}
 
 /* ---------------- PPTX parsing (client-side) ---------------- */
 
@@ -167,7 +171,7 @@ function speakWithBrowser(text, onEnd) {
 
 export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
   const slides = deck?.slides || [];
-  const voice = deck?.voice || "onyx";
+  const voice = normalizeVoice(deck?.voice);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
@@ -180,6 +184,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
   const indexRef = useRef(0);
   const pendingSecondsRef = useRef(0);
   const tokenRef = useRef(0); // invalidates stale "ended" callbacks
+  const [heard, setHeard] = useState(() => new Set());
 
   useEffect(() => {
     indexRef.current = index;
@@ -232,6 +237,14 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
     if (!playingRef.current) return;
     tokenRef.current += 1;
     const i = indexRef.current;
+    // The narration of slide i played to the end → count it as listened.
+    setHeard((prev) => {
+      if (prev.has(i)) return prev;
+      const next = new Set(prev);
+      next.add(i);
+      return next;
+    });
+    if (trackTime && lectureId) api.slideProgress(lectureId, i).catch(() => {});
     if (i < slides.length - 1) {
       setIndex(i + 1);
       // playback continues via effect below
@@ -241,7 +254,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
       setFinished(true);
       onComplete && onComplete();
     }
-  }, [slides.length, onComplete]);
+  }, [slides.length, onComplete, trackTime, lectureId]);
 
   const playSlide = useCallback(
     async (i) => {
@@ -377,8 +390,14 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
           التالية ◀
         </button>
       </div>
+      {trackTime && (
+        <p className="hint slide-heard">
+          🎧 استمعت إلى {heard.size} من {slides.length} شريحة (
+          {Math.round((heard.size / slides.length) * 100)}٪)
+        </p>
+      )}
       {mode === "browser" && (
-        <p className="hint">يتم استخدام صوت المتصفح حالياً لأن خدمة الصوت الاحترافي غير مفعّلة بعد.</p>
+        <p className="hint">يتم استخدام صوت المتصفح حالياً لأن خدمة الصوت الاحترافي (Google) غير مفعّلة بعد.</p>
       )}
       {error && <div className="error-box">{error}</div>}
       {index === slides.length - 1 && !finished && (

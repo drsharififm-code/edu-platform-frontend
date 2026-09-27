@@ -1,23 +1,36 @@
-# خطوات النشر — تحديث 1.1.0
+# خطوات النشر
 
-## 1) قاعدة البيانات (D1) — ✅ تمّت
-أُضيفت الأعمدة: `users.employee_id / email / hospital`، `lectures.available_until / slides_json`، وجدول `tts_cache` لتخزين الصوت المولَّد.
+## تحديث 1.2 — نسبة الشرائح المسموعة + صوت Google
+- التقرير: عمود جديد «الشرائح المسموعة» (النسبة وعدد الشرائح التي استمع المتدرب لقراءتها حتى النهاية).
+- المتدرب يرى أثناء العرض: «استمعت إلى X من Y شريحة».
+- الصوت: Google Cloud Text-to-Speech (WaveNet) — عربي وإنجليزي؛ الشرائح ثنائية اللغة تُقرأ كل لغة بصوتها.
+- قاعدة البيانات: أُضيف العمود `lecture_views.slides_heard` ✅
 
-## 2) تحديث الخادم (Cloudflare Worker: edu-platform-api)
-1. افتح Cloudflare → Workers & Pages → **edu-platform-api** → **Edit code**.
-2. احذف الكود الموجود والصق محتوى الملف `worker/worker.js` كاملاً ثم **Deploy**.
-3. (للصوت الاحترافي) Settings → **Variables and Secrets** → Add:
-   - Type: **Secret** — Name: `OPENAI_API_KEY` — Value: مفتاحك من platform.openai.com
-   - بدون المفتاح تعمل الشرائح بصوت المتصفح تلقائياً.
+### الملفات التي تُرفع إلى GitHub
+`App.jsx` · `api.js` · `slides.jsx` · `DEPLOY.md` · `worker/worker.js`
 
-## 3) تحديث الواجهة (Netlify)
-من مجلد المشروع على جهازك:
-```
-git push
-```
-سيبني Netlify الموقع تلقائياً (أُضيفت مكتبة `jszip` في package.json لقراءة ملفات PowerPoint).
+### الخادم (Cloudflare → edu-platform-api → Edit code)
+الصق محتوى `worker/worker.js` ثم Deploy.
 
-## ملاحظات
-- التواريخ كلها بالتقويم الميلادي وبتوقيت السعودية.
-- تاريخ الإتاحة: بعد انتهائه تختفي المحاضرة عن المتدربين ويرفض الخادم الحضور/الاختبار.
-- تكلفة الصوت تقريبية ≈ 0.015$ للدقيقة، ويُخزَّن الصوت بعد أول تشغيل فلا يتكرر الدفع.
+### مفتاح Google (مرة واحدة)
+1. https://console.cloud.google.com → أنشئ مشروعاً (مثلاً edu-platform).
+2. فعّل الفوترة (Billing) للمشروع — مطلوبة حتى مع الحصة المجانية.
+3. ابحث عن **Cloud Text-to-Speech API** → Enable.
+4. APIs & Services → Credentials → Create credentials → **API key**.
+5. اضغط على المفتاح → API restrictions → Restrict key → اختر Cloud Text-to-Speech API → Save.
+6. في Cloudflare → edu-platform-api → Settings → Variables and Secrets → Add:
+   - Type: Secret — Name: `GOOGLE_TTS_API_KEY` — Value: المفتاح.
+7. (اختياري) لصوت أكثر طبيعية: أضف متغير نصي `GOOGLE_TTS_TIER` = `chirp`.
+
+### التكلفة (Google)
+| النوع | مجاناً شهرياً | بعدها |
+|---|---|---|
+| WaveNet (الافتراضي) | 4 ملايين حرف | 4$ لكل مليون حرف |
+| Chirp 3 HD (`chirp`) | مليون حرف | 30$ لكل مليون حرف |
+
+الصوت يُخزَّن بعد أول توليد لكل شريحة، فلا يُدفع مرة أخرى عند استماع متدربين آخرين.
+
+---
+
+## تحديث 1.1
+حقول التسجيل، الشرائح الصوتية، الاختبار القصير، تاريخ الإتاحة، التقرير الميلادي، عرض الجوال.
