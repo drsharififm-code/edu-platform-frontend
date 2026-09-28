@@ -154,18 +154,132 @@ export async function parsePptx(file) {
 
 const isArabic = (t) => /[؀-ۿ]/.test(t || "");
 
-function speakWithBrowser(text, onEnd) {
+// Split bilingual text (English + Arabic on the same slide) into runs by language so
+// each run is read by a matching voice. Single-word runs (e.g. "HbA1c") stay inside
+// the surrounding language to avoid choppy audio. Mirrors the server-side logic.
+export function segmentByLang(text) {
+  const spaced = String(text || "")
+    .replace(/([^\s؀-ۿ])([؀-ۿ])/g, "$1 $2")
+    .replace(/([؀-ۿ])([A-Za-z(\[])/g, "$1 $2");
+  const runs = [];
+  for (const w of spaced.split(/(\s+)/).filter((x) => x.length)) {
+    const lang = /[؀-ۿ]/.test(w) ? "ar" : /[A-Za-z]/.test(w) ? "en" : null;
+    const last = runs[runs.length - 1];
+    if (!last) runs.push({ lang, text: w, words: lang ? 1 : 0 });
+    else if (lang === null || lang === last.lang || last.lang === null) {
+      last.text += w;
+      if (lang) {
+        last.lang = last.lang || lang;
+        last.words += 1;
+      }
+    } else runs.push({ lang, text: w, words: 1 });
+  }
+  while (runs.length > 1) {
+    let pick = -1;
+    let best = null;
+    runs.forEach((r, i) => {
+      if (r.words >= 2) return;
+      const nb = Math.max(runs[i - 1]?.words || 0, runs[i + 1]?.words || 0);
+      if (!best || r.words < best[0] || (r.words === best[0] && -nb < best[1])) {
+        best = [r.words, -nb];
+        pick = i;
+      }
+    });
+    if (pick < 0) break;
+    const left = runs[pick - 1];
+    const right = runs[pick + 1];
+    const j = !right || (left && left.words >= right.words) ? pick - 1 : pick + 1;
+    const [x, y] = j < pick ? [runs[j], runs[pick]] : [runs[pick], runs[j]];
+    runs.splice(Math.min(pick, j), 2, { lang: runs[j].lang, text: x.text + y.text, words: x.words + y.words });
+  }
+  const out = [];
+  for (const r of runs) {
+    const last = out[out.length - 1];
+    if (last && last.lang === r.lang) last.text += r.text;
+    else out.push({ lang: r.lang || "ar", text: r.text });
+  }
+  return out.map((r) => ({ lang: r.lang, text: r.text.trim() })).filter((r) => r.text);
+}
+
+// Browser voices: prefer high-quality "Natural"/"Online"/"Neural" voices (e.g. Microsoft
+// Hamed/Zariyah in Edge, Google voices in Chrome), Saudi Arabic first, matching gender.
+const MALE_HINTS = /hamed|naayf|shakir|fahed|hamdan|omar|bassel|rami|taim|moaz|shakir|guy|davis|andrew|brian|christopher|eric|roger|steffan|male|david|mark|james|daniel/i;
+const FEMALE_HINTS = /zariyah|hoda|salma|amina|layla|mouna|reem|sana|fatima|aria|jenny|emma|ava|michelle|ana|female|zira|samantha|susan|hazel|libby/i;
+
+function pickBrowserVoice(lang, gender) {
+  const voices = window.speechSynthesis.getVoices() || [];
+  const want = lang === "ar" ? "ar" : "en";
+  let best = null;
+  let bestScore = -1;
+  for (const v of voices) {
+    const vl = (v.lang || "").toLowerCase().replace("_", "-");
+    if (!vl.startsWith(want)) continue;
+    let score = 1;
+    if (/natural|online|neural|wavenet|premium|enhanced/i.test(v.name)) score += 5;
+    if (/^google/i.test(v.name)) score += 2;
+    if (want === "ar" && vl === "ar-sa") score += 2;
+    if (want === "en" && vl === "en-us") score += 1;
+    if (gender === "male" && MALE_HINTS.test(v.name)) score += 3;
+    if (gender === "female" && FEMALE_HINTS.test(v.name)) score += 3;
+    if (gender === "male" && FEMALE_HINTS.test(v.name)) score -= 2;
+    if (gender === "female" && MALE_HINTS.test(v.name)) score -= 2;
+    if (score > bestScore) {
+      bestScore = score;
+      best = v;
+    }
+  }
+  return best;
+}
+
+// Chrome/Edge load voices asynchronously; warm them up early.
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function speakWithBrowser(text, onEnd, voiceId) {
   if (!("speechSynthesis" in window)) return false;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = isArabic(text) ? "ar-SA" : "en-US";
-  const voices = window.speechSynthesis.getVoices();
-  const match = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith(u.lang.slice(0, 2)));
-  if (match) u.voice = match;
-  u.rate = 0.95;
-  u.onend = onEnd;
-  u.onerror = onEnd;
-  window.speechSynthesis.speak(u);
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  const gender = String(voiceId || "m1").startsWith("f") ? "female" : "male";
+  // Chrome cuts off long utterances (~15s), so also split each language run by sentence.
+  const parts = [];
+  for (const seg of segmentByLang(text)) {
+    let cur = "";
+    for (const sen of seg.text.split(/(?<=[.!?؟،؛:\n])\s+/)) {
+      if ((cur + " " + sen).length > 180 && cur) {
+        parts.push({ lang: seg.lang, text: cur });
+        cur = sen;
+      } else cur = cur ? cur + " " + sen : sen;
+    }
+    if (cur.trim()) parts.push({ lang: seg.lang, text: cur });
+  }
+  if (!parts.length) {
+    setTimeout(onEnd, 300);
+    return true;
+  }
+  let finished = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    onEnd && onEnd();
+  };
+  parts.forEach((part, i) => {
+    const u = new SpeechSynthesisUtterance(part.text);
+    u.lang = part.lang === "ar" ? "ar-SA" : "en-US";
+    const v = pickBrowserVoice(part.lang, gender);
+    if (v) u.voice = v;
+    u.rate = 0.95;
+    if (i === parts.length - 1) {
+      u.onend = done;
+      u.onerror = done;
+    }
+    synth.speak(u);
+  });
   return true;
 }
 
@@ -269,7 +383,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
         return;
       }
       if (mode === "browser") {
-        const ok = speakWithBrowser(text, onEnd);
+        const ok = speakWithBrowser(text, onEnd, voice);
         if (!ok) {
           setError("المتصفح لا يدعم القراءة الصوتية.");
           playingRef.current = false;
@@ -289,7 +403,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
       } catch (err) {
         if (err.code === "tts_not_configured") {
           setMode("browser");
-          speakWithBrowser(text, onEnd);
+          speakWithBrowser(text, onEnd, voice);
         } else if (err.name === "NotAllowedError") {
           playingRef.current = false;
           setPlaying(false);
@@ -303,7 +417,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
         setLoadingAudio(false);
       }
     },
-    [slides, mode, getAudioUrl, handleSlideEnded],
+    [slides, mode, voice, getAudioUrl, handleSlideEnded],
   );
 
   // When index changes while playing, narrate the new slide
