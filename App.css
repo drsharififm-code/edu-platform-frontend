@@ -769,6 +769,49 @@ textarea {
   border: 1px dashed var(--border);
 }
 
+/* ---------- Lecture content blocks & post-test gating ---------- */
+.content-block {
+  margin: 18px 0;
+  padding-top: 4px;
+}
+.content-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.content-block-head .section-title {
+  margin: 10px 0 6px;
+}
+.content-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+.content-done-tag {
+  color: var(--success);
+  font-weight: 700;
+  font-size: 13px;
+}
+.ppt-wrap {
+  background: #f1f5f9;
+}
+.content-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.content-checklist li.done {
+  color: var(--success);
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 640px) {
   .form-grid,
@@ -905,4 +948,64 @@ textarea {
   .data-table td {
     padding: 8px;
   }
+}
+
+/* ---------- Mandatory post-test card ---------- */
+.posttest-card {
+  margin: 22px 0 14px;
+  border: 2px solid var(--primary);
+  border-radius: 14px;
+  background: #f0fdfa;
+  padding: 14px;
+}
+.posttest-card.is-locked {
+  border-color: var(--border);
+  border-style: dashed;
+  background: #f8fafc;
+}
+.posttest-card.is-done {
+  border-color: var(--success);
+  background: #f0fdf4;
+}
+.posttest-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.posttest-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.posttest-title {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.posttest-title strong {
+  font-size: 1.1rem;
+  color: var(--primary-dark);
+}
+.posttest-sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.posttest-card .quiz-box {
+  margin-top: 8px;
+}
+.feedback-locked {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+  color: var(--muted);
 }

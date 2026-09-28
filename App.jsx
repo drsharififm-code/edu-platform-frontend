@@ -676,7 +676,6 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
   }));
   const [deck, setDeck] = useState(initial?.slides || null);
   const [hasQuiz, setHasQuiz] = useState(false);
-  const [addQuiz, setAddQuiz] = useState(true);
   const [mcqs, setMcqs] = useState([emptyMcq(), emptyMcq(), emptyMcq()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -709,11 +708,16 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     }));
   }
 
-  const quizActive = addQuiz && !hasQuiz;
+  // The post-test is mandatory: every lecture must have one.
+  const quizActive = !hasQuiz;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (!form.video_url.trim() && !form.slides_url.trim() && !deck) {
+      setError("أضف محتوى علمياً واحداً على الأقل: رابط فيديو، أو رابط محاضرة PowerPoint، أو ملف شرائح صوتية.");
+      return;
+    }
     if (quizActive) {
       const msg = validateShortQuiz(mcqs);
       if (msg) {
@@ -807,13 +811,16 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
         />
       </label>
       <label>
-        رابط ملف الشرائح للتنزيل (اختياري)
+        رابط محاضرة PowerPoint / PDF
         <input
           dir="ltr"
           value={form.slides_url}
           onChange={(e) => setForm({ ...form, slides_url: e.target.value })}
           placeholder="https://..."
         />
+        <span className="hint">
+          رابط عام لملف ‎.pptx أو PDF أو Google Slides — يُعرض داخل المنصة.
+        </span>
       </label>
 
       <div className="full">
@@ -853,7 +860,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
 
       <div className="full short-quiz-section">
         <div className="links-header">
-          <span>📝 اختبار قصير بعد المحاضرة (3 أسئلة اختيار من متعدد)</span>
+          <span>📝 الاختبار البعدي Post-test (3 أسئلة اختيار من متعدد) *</span>
         </div>
         {hasQuiz ? (
           <p className="hint">
@@ -861,15 +868,10 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
           </p>
         ) : (
           <>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={addQuiz}
-                onChange={(e) => setAddQuiz(e.target.checked)}
-              />
-              إضافة اختبار قصير يظهر للمتدرب بعد انتهاء الفيديو أو عرض الشرائح
-            </label>
-            {addQuiz && <ShortQuizBuilder questions={mcqs} setQuestions={setMcqs} />}
+            <p className="hint">
+              إلزامي: يظهر للمتدرب بعد إكمال محتوى المحاضرة (الفيديو، محاضرة PowerPoint، أو الشرائح الصوتية).
+            </p>
+            <ShortQuizBuilder questions={mcqs} setQuestions={setMcqs} />
           </>
         )}
       </div>
@@ -1109,6 +1111,13 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
 }
 
 /* ---------------- Quiz taking (trainee) ---------------- */
+
+/* ---------------- Leave guard (mandatory post-test) ---------------- */
+
+let leaveGuardMessage = null;
+function confirmLeave() {
+  return !leaveGuardMessage || window.confirm(leaveGuardMessage);
+}
 
 function TakeQuiz({ quiz, onSubmitted, alreadyAttempted }) {
   const [answers, setAnswers] = useState({});
@@ -1457,21 +1466,45 @@ function useYouTubeEnded(iframeRef, enabled, onEnded) {
   }, [enabled, iframeRef]);
 }
 
-const doneKey = (username, lectureId) => `edu_done_${username}_${lectureId}`;
-function readDone(username, lectureId) {
+// Embeddable viewer URL for a PowerPoint/PDF link (or null if it can only be opened as a link).
+function toSlidesViewerUrl(url) {
+  if (!url) return null;
+  const u = url.trim();
+  const gSlides = u.match(/docs\.google\.com\/presentation\/d\/([\w-]+)/);
+  if (gSlides) return `https://docs.google.com/presentation/d/${gSlides[1]}/embed?start=false&loop=false`;
+  const gDrive = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
+  if (gDrive) return `https://drive.google.com/file/d/${gDrive[1]}/preview`;
+  if (/\.(pptx?|ppsx?|docx?|xlsx?)(\?.*)?$/i.test(u))
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(u)}`;
+  if (/\.pdf(\?.*)?$/i.test(u)) return u;
+  return null;
+}
+
+// Per-item completion (video / PowerPoint link / spoken slides) remembered per trainee.
+const doneKey = (username, lectureId, item) => `edu_done_${username}_${lectureId}${item ? "_" + item : ""}`;
+function readDone(username, lectureId, item) {
   try {
-    return localStorage.getItem(doneKey(username, lectureId)) === "1";
+    return (
+      localStorage.getItem(doneKey(username, lectureId, item)) === "1" ||
+      localStorage.getItem(doneKey(username, lectureId)) === "1" // older "all done" flag
+    );
   } catch (e) {
     return false;
   }
 }
-function writeDone(username, lectureId) {
+function writeDone(username, lectureId, item) {
   try {
-    localStorage.setItem(doneKey(username, lectureId), "1");
+    localStorage.setItem(doneKey(username, lectureId, item), "1");
   } catch (e) {
     /* ignore */
   }
 }
+
+const CONTENT_LABELS = {
+  video: "مشاهدة الفيديو",
+  ppt: "الاطلاع على محاضرة PowerPoint",
+  deck: "الاستماع لعرض الشرائح الصوتي",
+};
 
 function LectureDetail({ lecture, user, onBack }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -1486,28 +1519,80 @@ function LectureDetail({ lecture, user, onBack }) {
     !embed && isDirectVideoUrl(lecture.video_url) ? lecture.video_url : null;
   const externalVideo = !embed && !directVideo && lecture.video_url;
   const hasSlides = !!lecture.slides?.slides?.length;
+  const pptViewer = toSlidesViewerUrl(lecture.slides_url);
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
   const quizRef = useRef(null);
   const expired = isLectureExpired(lecture);
 
-  // Quiz unlocks after the video ends or the slide show finishes.
-  const hasTrackableContent = !!(embed || directVideo || hasSlides);
-  const [contentDone, setContentDone] = useState(
-    () => !hasTrackableContent && !externalVideo ? true : readDone(user.username, lecture.id),
+  // Every content type in the lecture must be completed before the post-test opens.
+  const items = useMemo(() => {
+    const list = [];
+    if (lecture.video_url) list.push("video");
+    if (lecture.slides_url) list.push("ppt");
+    if (hasSlides) list.push("deck");
+    return list;
+  }, [lecture.video_url, lecture.slides_url, hasSlides]);
+
+  const [done, setDone] = useState(() =>
+    Object.fromEntries(items.map((it) => [it, readDone(user.username, lecture.id, it)])),
   );
-  const markDone = useCallback(() => {
-    writeDone(user.username, lecture.id);
-    setContentDone((was) => {
-      if (!was && isTrainee) {
-        setTimeout(() => {
-          quizRef.current &&
-            quizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 150);
-      }
-      return true;
-    });
-  }, [user.username, lecture.id, isTrainee]);
+  const [opened, setOpened] = useState({}); // external links the trainee has opened
+  const [quizUnlockedByAttempt, setQuizUnlockedByAttempt] = useState(false);
+  const contentDone = quizUnlockedByAttempt || items.every((it) => done[it]);
+  const quizDone =
+    quizzes.length > 0 && quizzes.every((q) => attemptedQuizIds.includes(q.id));
+  const mustTakeQuiz = isTrainee && !loading && !expired && quizzes.length > 0 && !quizDone;
+
+  const handleQuizSubmitted = useCallback((quizId) => {
+    setAttemptedQuizIds((ids) => (ids.includes(quizId) ? ids : [...ids, quizId]));
+    setQuizUnlockedByAttempt(true);
+  }, []);
+
+  // The post-test is mandatory: warn before leaving the lecture without taking it.
+  useEffect(() => {
+    if (!mustTakeQuiz) {
+      leaveGuardMessage = null;
+      return undefined;
+    }
+    leaveGuardMessage = contentDone
+      ? "لم تؤدِّ الاختبار البعدي بعد، وهو إلزامي. هل تريد مغادرة المحاضرة دون أداء الاختبار؟"
+      : "لم تُكمل المحاضرة والاختبار البعدي الإلزامي بعد. هل تريد المغادرة الآن؟";
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = leaveGuardMessage;
+      return leaveGuardMessage;
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      leaveGuardMessage = null;
+    };
+  }, [mustTakeQuiz, contentDone]);
+
+  const goBack = () => {
+    if (confirmLeave()) onBack();
+  };
+
+  const markDone = useCallback(
+    (item) => {
+      writeDone(user.username, lecture.id, item);
+      setDone((prev) => {
+        if (prev[item]) return prev;
+        const next = { ...prev, [item]: true };
+        if (isTrainee && items.every((it) => next[it])) {
+          setTimeout(() => {
+            quizRef.current &&
+              quizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 150);
+        }
+        return next;
+      });
+    },
+    [user.username, lecture.id, isTrainee, items],
+  );
+  const markVideoDone = useCallback(() => markDone("video"), [markDone]);
+  const markDeckDone = useCallback(() => markDone("deck"), [markDone]);
 
   useWatchTimeTracker(lecture.id, isTrainee && !!embed && !expired);
   useVideoElementWatchTime(
@@ -1515,7 +1600,7 @@ function LectureDetail({ lecture, user, onBack }) {
     videoRef,
     isTrainee && !!directVideo && !expired,
   );
-  useYouTubeEnded(iframeRef, !!embed, markDone);
+  useYouTubeEnded(iframeRef, !!embed, markVideoDone);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1529,7 +1614,7 @@ function LectureDetail({ lecture, user, onBack }) {
           const a = await api.getMyAttempts();
           const ids = (a.attempts || []).map((x) => x.quiz_id);
           setAttemptedQuizIds(ids);
-          if (q.quizzes.some((qz) => ids.includes(qz.id))) setContentDone(true);
+          if (q.quizzes.some((qz) => ids.includes(qz.id))) setQuizUnlockedByAttempt(true);
         } catch (e) {
           /* ignore */
         }
@@ -1572,9 +1657,24 @@ function LectureDetail({ lecture, user, onBack }) {
     ? `${embed}?enablejsapi=1&rel=0&playsinline=1&origin=${encodeURIComponent(window.location.origin)}`
     : null;
 
+  // Manual confirmation button for content we cannot track automatically.
+  const confirmButton = (item, text, needsOpen) =>
+    isTrainee && !done[item] ? (
+      <button
+        className="btn btn-small btn-success content-done-btn"
+        disabled={needsOpen && !opened[item]}
+        title={needsOpen && !opened[item] ? "افتح الرابط أولاً" : ""}
+        onClick={() => markDone(item)}
+      >
+        ✔ {text}
+      </button>
+    ) : isTrainee && done[item] ? (
+      <span className="content-done-tag">✔ تم</span>
+    ) : null;
+
   return (
     <div className="panel">
-      <button className="btn btn-small" onClick={onBack}>
+      <button className="btn btn-small" onClick={goBack}>
         → رجوع
       </button>
       <h2>{lecture.title}</h2>
@@ -1595,61 +1695,93 @@ function LectureDetail({ lecture, user, onBack }) {
         <p className="description">{lecture.description}</p>
       )}
 
-      {embedSrc && (
-        <div className="video-wrap">
-          <iframe
-            ref={iframeRef}
-            src={embedSrc}
-            title="video"
-            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      )}
-      {directVideo && (
-        <div className="video-wrap">
-          <video
-            ref={videoRef}
-            src={directVideo}
-            controls
-            playsInline
-            preload="metadata"
-            onEnded={markDone}
-          />
-        </div>
-      )}
-      {externalVideo && (
-        <p>
-          <a
-            href={lecture.video_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-small"
-          >
-            ▶ مشاهدة الفيديو
-          </a>
-        </p>
-      )}
-
-      {hasSlides && (
-        <div className="slides-section">
-          <h3 className="section-title">🎙 عرض الشرائح الصوتي</h3>
-          <SlidePlayer
-            deck={lecture.slides}
-            lectureId={lecture.id}
-            trackTime={isTrainee}
-            onComplete={markDone}
-          />
+      {lecture.video_url && (
+        <div className="content-block">
+          <div className="content-block-head">
+            <h3 className="section-title">🎬 الفيديو</h3>
+            {isTrainee && done.video && <span className="content-done-tag">✔ تمت المشاهدة</span>}
+          </div>
+          {embedSrc && (
+            <div className="video-wrap">
+              <iframe
+                ref={iframeRef}
+                src={embedSrc}
+                title="video"
+                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          )}
+          {directVideo && (
+            <div className="video-wrap">
+              <video
+                ref={videoRef}
+                src={directVideo}
+                controls
+                playsInline
+                preload="metadata"
+                onEnded={markVideoDone}
+              />
+            </div>
+          )}
+          {externalVideo && (
+            <div className="content-actions">
+              <a
+                href={lecture.video_url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-small"
+                onClick={() => setOpened((o) => ({ ...o, video: true }))}
+              >
+                ▶ فتح الفيديو
+              </a>
+              {confirmButton("video", "أنهيت مشاهدة الفيديو", true)}
+            </div>
+          )}
         </div>
       )}
 
       {lecture.slides_url && (
-        <p>
-          <a href={lecture.slides_url} target="_blank" rel="noreferrer">
-            📑 تنزيل ملف الشرائح
-          </a>
-        </p>
+        <div className="content-block">
+          <div className="content-block-head">
+            <h3 className="section-title">📑 محاضرة PowerPoint</h3>
+            {isTrainee && done.ppt && <span className="content-done-tag">✔ تم الاطلاع</span>}
+          </div>
+          {pptViewer && (
+            <div className="video-wrap ppt-wrap">
+              <iframe src={pptViewer} title="slides" allowFullScreen />
+            </div>
+          )}
+          <div className="content-actions">
+            <a
+              href={lecture.slides_url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-small"
+              onClick={() => setOpened((o) => ({ ...o, ppt: true }))}
+            >
+              {pptViewer ? "↗ فتح في نافذة جديدة" : "📑 فتح المحاضرة"}
+            </a>
+            {!done.ppt && confirmButton("ppt", "أنهيت الاطلاع على المحاضرة", !pptViewer)}
+          </div>
+        </div>
       )}
+
+      {hasSlides && (
+        <div className="content-block slides-section">
+          <div className="content-block-head">
+            <h3 className="section-title">🎙 عرض الشرائح الصوتي</h3>
+            {isTrainee && done.deck && <span className="content-done-tag">✔ تم الاستماع</span>}
+          </div>
+          <SlidePlayer
+            deck={lecture.slides}
+            lectureId={lecture.id}
+            trackTime={isTrainee}
+            onComplete={markDeckDone}
+          />
+        </div>
+      )}
+
       {lecture.extra_links?.length > 0 && (
         <ul className="extra-links">
           {lecture.extra_links.map((l, i) => (
@@ -1666,38 +1798,65 @@ function LectureDetail({ lecture, user, onBack }) {
       <ErrorBox message={error} />
 
       <div ref={quizRef} />
-      {!loading && isTrainee && quizzes.length > 0 && !contentDone && (
-        <div className="quiz-locked">
-          <strong>📝 الاختبار القصير</strong>
-          <p className="muted">
-            {hasTrackableContent
-              ? "سيظهر الاختبار بعد انتهاء الفيديو أو عرض الشرائح."
-              : "بعد مشاهدة الفيديو اضغط الزر أدناه لبدء الاختبار."}
-          </p>
-          {externalVideo && !hasTrackableContent && (
-            <button className="btn btn-small btn-success" onClick={markDone}>
-              ✔ أنهيت المشاهدة — ابدأ الاختبار
-            </button>
+      {!loading && isTrainee && quizzes.length > 0 && (
+        <div className={`posttest-card ${quizDone ? "is-done" : contentDone ? "is-open" : "is-locked"}`}>
+          <div className="posttest-head">
+            <span className="posttest-icon" aria-hidden="true">
+              {quizDone ? "✅" : contentDone ? "📝" : "🔒"}
+            </span>
+            <div className="posttest-title">
+              <strong>الاختبار البعدي <bdi>(Post-test)</bdi></strong>
+              <span className="posttest-sub">
+                {quizDone
+                  ? "تم أداء الاختبار"
+                  : contentDone
+                    ? "أجب عن الأسئلة ثم أرسل إجاباتك"
+                    : "يُفتح بعد إكمال محتوى المحاضرة"}
+              </span>
+            </div>
+            <Badge tone={quizDone ? "success" : "danger"}>إلزامي</Badge>
+          </div>
+          {!contentDone && (
+            <ul className="content-checklist">
+              {items.map((it) => (
+                <li key={it} className={done[it] ? "done" : ""}>
+                  {done[it] ? "✅" : "⬜"} {CONTENT_LABELS[it]}
+                </li>
+              ))}
+            </ul>
           )}
+          {contentDone &&
+            quizzes.map((quiz) => (
+              <TakeQuiz
+                key={quiz.id}
+                quiz={quiz}
+                alreadyAttempted={attemptedQuizIds.includes(quiz.id)}
+                onSubmitted={() => handleQuizSubmitted(quiz.id)}
+              />
+            ))}
         </div>
       )}
 
+      {!loading && canModerate && quizzes.length > 0 && (
+        <h3 className="section-title">📝 الاختبار البعدي (Post-test)</h3>
+      )}
       {!loading &&
-        (canModerate || contentDone) &&
-        quizzes.map((quiz) => (
-          <div key={quiz.id}>
-            {isTrainee ? (
-              <TakeQuiz
-                quiz={quiz}
-                alreadyAttempted={attemptedQuizIds.includes(quiz.id)}
-              />
-            ) : (
-              <QuizAnswerKey quiz={quiz} />
-            )}
-          </div>
-        ))}
+        canModerate &&
+        quizzes.map((quiz) => <QuizAnswerKey key={quiz.id} quiz={quiz} />)}
+      {!loading && canModerate && quizzes.length === 0 && (
+        <div className="error-box">
+          لا يوجد اختبار بعدي لهذه المحاضرة. أضفه من «تعديل» أو «إدارة الاختبار».
+        </div>
+      )}
 
-      {isTrainee && contentDone && <FeedbackForm lectureId={lecture.id} />}
+      {!loading && isTrainee && (quizDone || quizzes.length === 0) && contentDone && (
+        <FeedbackForm lectureId={lecture.id} />
+      )}
+      {!loading && isTrainee && quizzes.length > 0 && !quizDone && (
+        <div className="feedback-locked">
+          🔒 تقييم المحاضرة (Feedback) يُتاح بعد إكمال الاختبار البعدي.
+        </div>
+      )}
 
       {feedback && (
         <div className="panel-sub">
@@ -2564,13 +2723,13 @@ export default function App() {
         <nav className="app-header-nav">
           <button
             className={view === "home" ? "tab active" : "tab"}
-            onClick={() => setView("home")}
+            onClick={() => confirmLeave() && setView("home")}
           >
             الرئيسية
           </button>
           <button
             className={view === "profile" ? "tab active" : "tab"}
-            onClick={() => setView("profile")}
+            onClick={() => confirmLeave() && setView("profile")}
           >
             الملف الشخصي
           </button>
@@ -2579,7 +2738,10 @@ export default function App() {
           <div className="app-header-user-row">
             <span className="app-header-username">{user.name}</span>
             <Badge tone="info">{ROLE_LABELS[user.role]}</Badge>
-            <button className="btn btn-small" onClick={handleLogout}>
+            <button
+              className="btn btn-small"
+              onClick={() => confirmLeave() && handleLogout()}
+            >
               خروج
             </button>
           </div>
