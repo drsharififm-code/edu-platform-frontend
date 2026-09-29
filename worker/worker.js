@@ -303,6 +303,37 @@ async function handleUsersPost(request, env) {
   return json({ ok: true, users: results.map(publicUser) });
 }
 
+async function handleUsersDelete(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { username } = (await readJson(request)) || {};
+  if (!username) return json({ ok: false, message: "اسم المستخدم مطلوب." }, 400);
+  if (username === caller.username) return json({ ok: false, message: "لا يمكنك حذف حسابك." }, 400);
+  const u = await env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
+  if (!u) return json({ ok: true });
+  if (u.status !== "rejected") return json({ ok: false, message: "يمكن حذف الحسابات المرفوضة فقط. ارفض الحساب أولاً." }, 400);
+  for (const sql of [
+    "DELETE FROM sessions WHERE username = ?",
+    "DELETE FROM quiz_attempts WHERE username = ?",
+    "DELETE FROM lecture_views WHERE username = ?",
+    "DELETE FROM feedback WHERE username = ?",
+  ]) {
+    try { await env.DB.prepare(sql).bind(username).run(); } catch (e) { /* table may not exist */ }
+  }
+  await env.DB.prepare("DELETE FROM users WHERE username = ?").bind(username).run();
+  const { results } = await env.DB.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
+  return json({ ok: true, users: results.map(publicUser) });
+}
+
+async function handleLecturersGet(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || (caller.role !== "lecturer" && caller.role !== "admin")) return json({ ok: false, message: "ممنوع." }, 403);
+  const { results } = await env.DB.prepare(
+    "SELECT username, name, role FROM users WHERE status = 'approved' AND role IN ('lecturer','admin') ORDER BY name"
+  ).all();
+  return json({ ok: true, lecturers: results });
+}
+
 async function handleProgramsGet(env) {
   const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
   return json({ ok: true, programs: results });
@@ -433,6 +464,7 @@ async function handleLecturesCreate(request, env) {
   const body = (await readJson(request)) || {};
   const { title, description, program_id, topic, video_url, slides_url, extra_links, available_until, slides } = body;
   if (!title || !title.trim()) return json({ ok: false, message: "عنوان المحاضرة مطلوب." }, 400);
+  const lecturerName = String(body.lecturer_name || "").trim().slice(0, 120) || caller.name;
   const result = await env.DB.prepare(
     `INSERT INTO lectures (title, description, program_id, topic, lecturer_username, lecturer_name, video_url, slides_url, extra_links, available_until, slides_json, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`
@@ -443,7 +475,7 @@ async function handleLecturesCreate(request, env) {
       program_id || null,
       topic || null,
       caller.username,
-      caller.name,
+      lecturerName,
       video_url || null,
       slides_url || null,
       JSON.stringify(extra_links || []),
@@ -469,7 +501,7 @@ async function handleLecturesUpdate(request, env) {
   const slidesJson = "slides" in body ? normalizeSlides(body.slides) : lecture.slides_json;
   await env.DB.prepare(
     `UPDATE lectures SET title = ?, description = ?, program_id = ?, topic = ?, video_url = ?, slides_url = ?, extra_links = ?,
-       available_until = ?, slides_json = ?, status = ?, updated_at = datetime('now') WHERE id = ?`
+       available_until = ?, slides_json = ?, status = ?, lecturer_name = ?, updated_at = datetime('now') WHERE id = ?`
   )
     .bind(
       title || lecture.title,
@@ -482,6 +514,7 @@ async function handleLecturesUpdate(request, env) {
       availableUntil,
       slidesJson,
       newStatus,
+      "lecturer_name" in body ? String(body.lecturer_name || "").trim().slice(0, 120) || lecture.lecturer_name : lecture.lecturer_name,
       id
     )
     .run();
@@ -1119,6 +1152,8 @@ export default {
       "POST /api/profile": () => handleProfile(request, env),
       "GET /api/users": () => handleUsersGet(request, env),
       "POST /api/users": () => handleUsersPost(request, env),
+      "POST /api/users/delete": () => handleUsersDelete(request, env),
+      "GET /api/lecturers": () => handleLecturersGet(request, env),
       "GET /api/programs": () => handleProgramsGet(env),
       "POST /api/programs": () => handleProgramsPost(request, env),
       "POST /api/programs/update": () => handleProgramsUpdate(request, env),
