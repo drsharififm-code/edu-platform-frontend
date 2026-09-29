@@ -361,7 +361,7 @@ function AuthPage({ onLoggedIn }) {
 
 /* ---------------- Profile ---------------- */
 
-function ProfilePage({ user, onUpdated }) {
+function ProfilePage({ user, onUpdated, mustComplete = false }) {
   const [form, setForm] = useState({
     name: user.name || "",
     password: "",
@@ -381,6 +381,11 @@ function ProfilePage({ user, onUpdated }) {
     setLoading(true);
     setError("");
     setSuccess("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setLoading(false);
+      setError("البريد الإلكتروني مطلوب — الرجاء إدخال بريد صحيح.");
+      return;
+    }
     try {
       const payload = { ...form };
       if (!payload.password) delete payload.password;
@@ -398,6 +403,12 @@ function ProfilePage({ user, onUpdated }) {
   return (
     <div className="panel">
       <h2>الملف الشخصي</h2>
+      {mustComplete && (
+        <div className="notice-box">
+          📧 الرجاء إضافة بريدك الإلكتروني لإكمال بيانات حسابك. سيُستخدم لإرسال
+          إشعارات المنصة (مثل اعتماد الحساب) وشهادات الحضور.
+        </div>
+      )}
       <ErrorBox message={error} />
       <SuccessBox message={success} />
       <form className="form form-grid" onSubmit={handleSubmit}>
@@ -426,10 +437,11 @@ function ProfilePage({ user, onUpdated }) {
           />
         </label>
         <label>
-          البريد الإلكتروني
+          البريد الإلكتروني *
           <input
             type="email"
             dir="ltr"
+            required
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
@@ -1112,6 +1124,99 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
 
 /* ---------------- Quiz taking (trainee) ---------------- */
 
+/* ---------------- Attendance certificate (PDF via print) ---------------- */
+
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function certificateNumber(lectureId, attemptId) {
+  return `FCM-${String(lectureId).padStart(4, "0")}-${String(attemptId).padStart(5, "0")}`;
+}
+
+function openCertificate({ user, lecture, attempt }) {
+  const w = window.open("", "_blank");
+  if (!w) {
+    window.alert("الرجاء السماح بالنوافذ المنبثقة لهذا الموقع لتحميل الشهادة.");
+    return;
+  }
+  const e = escapeHtml;
+  const no = certificateNumber(lecture.id, attempt.id);
+  const details = [
+    user.employee_id ? `الرقم الوظيفي: <b>${e(user.employee_id)}</b>` : "",
+    user.hospital ? `المنشأة: <b>${e(user.hospital)}</b>` : "",
+  ].filter(Boolean).join(" &nbsp;•&nbsp; ");
+  w.document.open();
+  w.document.write(`<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شهادة حضور - ${e(user.name)} - ${e(no)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e5ecea; font-family: "Tajawal", "Segoe UI", Tahoma, sans-serif; color: #1f2937; }
+  .toolbar { display: flex; gap: 8px; justify-content: center; padding: 12px; }
+  .toolbar button { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: 0; background: #0f766e; color: #fff; cursor: pointer; }
+  .toolbar .hint { align-self: center; color: #475569; font-size: 14px; }
+  .page { width: 297mm; height: 210mm; margin: 0 auto 16px; background: #fff; padding: 12mm; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+  .frame { height: 100%; border: 3px solid #0f766e; outline: 1px solid #99c9c2; outline-offset: -9px; border-radius: 6px; padding: 12mm 18mm; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+  .head { display: flex; align-items: center; gap: 14px; }
+  .head img { width: 64px; height: 60px; object-fit: contain; }
+  .platform { font-weight: 700; color: #115e59; font-size: 18px; }
+  h1 { margin: 10mm 0 2mm; font-size: 40px; font-weight: 800; color: #0f766e; letter-spacing: 1px; }
+  .en { font-size: 16px; color: #64748b; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 7mm; }
+  .line { font-size: 19px; margin: 1.5mm 0; }
+  .name { font-size: 34px; font-weight: 800; color: #111827; margin: 3mm 0 2mm; border-bottom: 2px solid #f59e0b; padding: 0 10mm 2mm; }
+  .details { font-size: 16px; color: #475569; margin-bottom: 4mm; }
+  .title { font-size: 24px; font-weight: 700; color: #115e59; margin: 2mm 0 3mm; }
+  .score { display: inline-block; background: #f0fdfa; border: 1px solid #99c9c2; border-radius: 999px; padding: 1.5mm 6mm; font-weight: 700; color: #0f766e; }
+  .foot { margin-top: auto; width: 100%; display: flex; justify-content: space-between; align-items: flex-end; font-size: 14px; color: #475569; }
+  .foot .box { text-align: center; min-width: 60mm; }
+  .foot .sig { border-top: 1px solid #94a3b8; margin-top: 12mm; padding-top: 2mm; }
+  .no { font-family: monospace; direction: ltr; font-size: 14px; color: #334155; }
+  @media screen and (max-width: 1100px) {
+    .page { transform-origin: top center; transform: scale(calc(100vw / 1180)); margin-bottom: calc((100vw / 1180 - 1) * 210mm); }
+  }
+  @media print {
+    html, body { background: #fff; }
+    .toolbar { display: none; }
+    .page { margin: 0; box-shadow: none; transform: none !important; }
+  }
+</style></head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">⬇ حفظ PDF / طباعة</button>
+    <span class="hint">اختر «حفظ بتنسيق PDF» (Save as PDF) من نافذة الطباعة</span>
+  </div>
+  <div class="page"><div class="frame">
+    <div class="head"><img src="${PROGRAM_LOGO}" alt=""><div class="platform">${e(PLATFORM_NAME)}</div></div>
+    <h1>شهادة حضور</h1>
+    <div class="en">Certificate of Attendance</div>
+    <div class="line">تشهد ${e(PLATFORM_NAME)} بأن</div>
+    <div class="name">${e(user.name)}</div>
+    ${details ? `<div class="details">${details}</div>` : ""}
+    <div class="line">قد أتمّ/ت حضور المحاضرة التعليمية بعنوان</div>
+    <div class="title">«${e(lecture.title)}»</div>
+    <div class="line">المحاضر: <b>${e(lecture.lecturer_name || "")}</b></div>
+    <div class="line" style="margin-top:3mm"><span class="score">واجتاز/ت الاختبار البعدي بنسبة ${e(attempt.score)}%</span></div>
+    <div class="foot">
+      <div class="box">تاريخ الإصدار<br><b>${e(fmtDate(attempt.attempted_at))}</b></div>
+      <div class="box">رقم الشهادة<br><span class="no">${e(no)}</span></div>
+    </div>
+  </div></div>
+  <script>
+    (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () {
+      setTimeout(function () { window.print(); }, 350);
+    });
+  </script>
+</body></html>`);
+  w.document.close();
+}
+
 /* ---------------- Leave guard (mandatory post-test) ---------------- */
 
 let leaveGuardMessage = null;
@@ -1510,6 +1615,7 @@ function LectureDetail({ lecture, user, onBack }) {
   const [quizzes, setQuizzes] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [attemptedQuizIds, setAttemptedQuizIds] = useState([]);
+  const [myAttempts, setMyAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const isTrainee = user.role === "trainee";
@@ -1547,7 +1653,24 @@ function LectureDetail({ lecture, user, onBack }) {
   const handleQuizSubmitted = useCallback((quizId) => {
     setAttemptedQuizIds((ids) => (ids.includes(quizId) ? ids : [...ids, quizId]));
     setQuizUnlockedByAttempt(true);
+    api
+      .getMyAttempts()
+      .then((a) => setMyAttempts(a.attempts || []))
+      .catch(() => {});
   }, []);
+
+  // Best passing attempt for this lecture's post-test → attendance certificate.
+  const passedAttempt = useMemo(() => {
+    const quizIds = quizzes.map((q) => q.id);
+    const passed = myAttempts.filter((a) => quizIds.includes(a.quiz_id) && Number(a.passed) === 1);
+    if (!passed.length) return null;
+    return passed.reduce((best, a) =>
+      Number(a.score) > Number(best.score) ||
+      (Number(a.score) === Number(best.score) && String(a.attempted_at) < String(best.attempted_at))
+        ? a
+        : best,
+    );
+  }, [quizzes, myAttempts]);
 
   // The post-test is mandatory: warn before leaving the lecture without taking it.
   useEffect(() => {
@@ -1614,6 +1737,7 @@ function LectureDetail({ lecture, user, onBack }) {
           const a = await api.getMyAttempts();
           const ids = (a.attempts || []).map((x) => x.quiz_id);
           setAttemptedQuizIds(ids);
+          setMyAttempts(a.attempts || []);
           if (q.quizzes.some((qz) => ids.includes(qz.id))) setQuizUnlockedByAttempt(true);
         } catch (e) {
           /* ignore */
@@ -1834,6 +1958,30 @@ function LectureDetail({ lecture, user, onBack }) {
                 onSubmitted={() => handleQuizSubmitted(quiz.id)}
               />
             ))}
+        </div>
+      )}
+
+      {!loading && isTrainee && passedAttempt && (
+        <div className="certificate-card">
+          <span className="certificate-icon" aria-hidden="true">🎓</span>
+          <div className="certificate-text">
+            <strong>شهادة الحضور</strong>
+            <span>
+              اجتزت الاختبار البعدي بنسبة {passedAttempt.score}% — رقم الشهادة{" "}
+              <bdi dir="ltr">{certificateNumber(lecture.id, passedAttempt.id)}</bdi>
+            </span>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => openCertificate({ user, lecture, attempt: passedAttempt })}
+          >
+            ⬇ تحميل الشهادة PDF
+          </button>
+        </div>
+      )}
+      {!loading && isTrainee && quizDone && !passedAttempt && (
+        <div className="feedback-locked">
+          🎓 تُمنح شهادة الحضور عند اجتياز الاختبار البعدي بالدرجة المطلوبة.
         </div>
       )}
 
@@ -2750,14 +2898,15 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
-        {view === "home" && user.role === "trainee" && (
+        {!user.email && <ProfilePage user={user} onUpdated={setUser} mustComplete />}
+        {user.email && view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
+        {user.email && view === "home" && user.role === "trainee" && (
           <TraineeDashboard user={user} />
         )}
-        {view === "home" && user.role === "lecturer" && (
+        {user.email && view === "home" && user.role === "lecturer" && (
           <LecturerDashboard user={user} />
         )}
-        {view === "home" && user.role === "admin" && (
+        {user.email && view === "home" && user.role === "admin" && (
           <AdminDashboard user={user} />
         )}
       </main>
