@@ -796,6 +796,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     description: initial?.description || "",
     program_id: initial?.program_id || "",
     topic: initial?.topic || "",
+    lecturer_name: initial?.lecturer_name || "",
     video_url: initial?.video_url || "",
     slides_url: initial?.slides_url || "",
     available_until: initial?.available_until || "",
@@ -803,6 +804,13 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
   }));
   const [deck, setDeck] = useState(initial?.slides || null);
   const [existingQuiz, setExistingQuiz] = useState(null);
+  const [lecturers, setLecturers] = useState([]);
+  useEffect(() => {
+    api
+      .getLecturers()
+      .then((d) => setLecturers(d.lecturers || []))
+      .catch(() => {});
+  }, []);
   const [mcqs, setMcqs] = useState([emptyMcq(), emptyMcq(), emptyMcq()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -915,6 +923,23 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
             </option>
           ))}
         </select>
+      </label>
+      <label>
+        اسم المحاضر
+        <input
+          list="lecturer-options"
+          value={form.lecturer_name}
+          placeholder="اختر من القائمة أو اكتب الاسم يدوياً"
+          onChange={(e) => setForm({ ...form, lecturer_name: e.target.value })}
+        />
+        <datalist id="lecturer-options">
+          {lecturers.map((l) => (
+            <option key={l.username} value={l.name} />
+          ))}
+        </datalist>
+        <span className="hint">
+          اختر محاضراً مسجلاً في المنصة أو اكتب اسم محاضر من خارجها. إذا تُرك فارغاً يُستخدم اسمك.
+        </span>
       </label>
       <label>
         الموضوع / المحور
@@ -1329,7 +1354,6 @@ function openCertificate({ user, lecture, attempt }) {
     ${details ? `<div class="details">${details}</div>` : ""}
     <div class="line">قد أتمّ/ت حضور المحاضرة التعليمية بعنوان</div>
     <div class="title">«${e(lecture.title)}»</div>
-    <div class="line">المحاضر: <b>${e(lecture.lecturer_name || "")}</b></div>
     <div class="line" style="margin-top:3mm"><span class="score">واجتاز/ت الاختبار البعدي بنسبة ${e(attempt.score)}%</span></div>
     <div class="foot">
       <div class="box">تاريخ الإصدار<br><b>${e(fmtDate(attempt.attempted_at))}</b></div>
@@ -2540,6 +2564,16 @@ function UsersManagement() {
       alert(err.message);
     }
   }
+  async function deleteUser(u) {
+    if (!window.confirm(`حذف حساب «${u.name}» (${u.username}) نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    try {
+      const data = await api.deleteUser(u.username);
+      if (data?.users) setUsers(data.users);
+      else load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
   async function updateRole(u, role) {
     try {
       await api.updateUser({ username: u.username, role });
@@ -2617,6 +2651,14 @@ function UsersManagement() {
                     onClick={() => updateStatus(u, "rejected")}
                   >
                     رفض
+                  </button>
+                )}
+                {u.status === "rejected" && (
+                  <button
+                    className="btn btn-small btn-danger"
+                    onClick={() => deleteUser(u)}
+                  >
+                    🗑 حذف الحساب
                   </button>
                 )}
               </td>

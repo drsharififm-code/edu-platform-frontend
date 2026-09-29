@@ -49,6 +49,8 @@ export const api = {
 
   getUsers: () => request('/api/users'),
   updateUser: (payload) => request('/api/users', { method: 'POST', body: payload }),
+  deleteUser: (username) => request('/api/users/delete', { method: 'POST', body: { username } }),
+  getLecturers: () => request('/api/lecturers'),
 
   getPrograms: () => request('/api/programs', { auth: false }),
   createProgram: (payload) => request('/api/programs', { method: 'POST', body: payload }),
