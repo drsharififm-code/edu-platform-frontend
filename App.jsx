@@ -570,6 +570,121 @@ function shortQuizPayload(lectureId, title, questions) {
   };
 }
 
+function quizToMcqs(quiz) {
+  return (quiz?.questions || []).map((q) => {
+    const opts = (q.options || []).map((o) => o.text || "");
+    const correct = Math.max(0, (q.options || []).findIndex((o) => o.correct));
+    while (opts.length < 4) opts.push("");
+    return { question_text: q.question_text || "", options: opts.slice(0, Math.max(4, opts.length)), correct };
+  });
+}
+
+function generatedToMcqs(list) {
+  return list.map((q) => {
+    const opts = (q.options || []).slice(0, 4);
+    while (opts.length < 4) opts.push("");
+    return { question_text: q.question || "", options: opts, correct: q.correct || 0 };
+  });
+}
+
+function deckToText(deck) {
+  return (deck?.slides || [])
+    .map((sl, i) => [`Slide ${i + 1}: ${sl.title || ""}`, ...(sl.bullets || []), sl.narration || ""].filter(Boolean).join("\n"))
+    .join("\n\n");
+}
+
+function QuizGenerator({ deck, title, onGenerated }) {
+  const [open, setOpen] = useState(false);
+  const [fileText, setFileText] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [pasted, setPasted] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const deckText = deckToText(deck);
+
+  async function onFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    try {
+      const slides = await parsePptx(file);
+      setFileText(deckToText({ slides }));
+      setFileName(file.name);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function generate() {
+    const text = [deckText, fileText, pasted].filter((t) => t && t.trim()).join("\n\n");
+    setError("");
+    setInfo("");
+    if (text.trim().length < 80) {
+      setError("أرفق ملف المحاضرة (PowerPoint) أو الصق نصها أولاً — النص الحالي غير كافٍ.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.generateQuiz({ text, title, count: 3 });
+      onGenerated(generatedToMcqs(res.questions));
+      setInfo("تم إنشاء الأسئلة ✓ — راجعها وعدّلها بالأسفل قبل الحفظ.");
+    } catch (err) {
+      setError(
+        err.status === 503
+          ? "خدمة الذكاء الاصطناعي غير مفعّلة بعد على الخادم. يمكنك كتابة الأسئلة يدوياً الآن."
+          : err.message,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="quiz-generator">
+      {!open ? (
+        <button type="button" className="btn btn-ai" onClick={() => setOpen(true)}>
+          ✨ إنشاء الأسئلة تلقائياً من المحاضرة
+        </button>
+      ) : (
+        <div className="quiz-generator-box">
+          <strong>✨ إنشاء أسئلة الاختبار البعدي بالذكاء الاصطناعي</strong>
+          <p className="hint">
+            يقرأ النظام محتوى المحاضرة ويقترح 3 أسئلة اختيار من متعدد مع الإجابات الصحيحة، ثم يمكنك تعديلها.
+          </p>
+          <ul className="gen-sources">
+            {deckText ? (
+              <li>✅ نص الشرائح الصوتية المرفقة ({deck.slides.length} شريحة)</li>
+            ) : null}
+            <li>
+              <label className="btn btn-small file-btn">
+                📎 {fileName ? "تغيير ملف PowerPoint" : "إرفاق ملف المحاضرة (PowerPoint ‎.pptx)"}
+                <input type="file" accept=".pptx" hidden onChange={onFile} />
+              </label>
+              {fileName && <span className="muted"> {fileName} ✓</span>}
+            </li>
+          </ul>
+          <label>
+            أو الصق نص المحاضرة / الملخص (اختياري)
+            <textarea rows={4} value={pasted} onChange={(e) => setPasted(e.target.value)} />
+          </label>
+          <ErrorBox message={error} />
+          {info && <div className="success-box">{info}</div>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-ai" disabled={busy} onClick={generate}>
+              {busy ? <Spinner /> : "✨ إنشاء الأسئلة"}
+            </button>
+            <button type="button" className="btn btn-small" onClick={() => setOpen(false)}>
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SlidesEditor({ deck, setDeck }) {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
@@ -679,7 +794,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     id: initial?.id,
     title: initial?.title || "",
     description: initial?.description || "",
-    program_id: initial?.program_id || (programs[0]?.id ?? ""),
+    program_id: initial?.program_id || "",
     topic: initial?.topic || "",
     video_url: initial?.video_url || "",
     slides_url: initial?.slides_url || "",
@@ -687,7 +802,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     extra_links: initial?.extra_links?.length ? initial.extra_links : [],
   }));
   const [deck, setDeck] = useState(initial?.slides || null);
-  const [hasQuiz, setHasQuiz] = useState(false);
+  const [existingQuiz, setExistingQuiz] = useState(null);
   const [mcqs, setMcqs] = useState([emptyMcq(), emptyMcq(), emptyMcq()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -696,7 +811,14 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     if (!initial?.id) return;
     api
       .getQuizzes(initial.id)
-      .then((d) => setHasQuiz(d.quizzes.length > 0))
+      .then((d) => {
+        const q = d.quizzes[0];
+        if (q) {
+          setExistingQuiz(q);
+          const list = quizToMcqs(q);
+          if (list.length) setMcqs(list);
+        }
+      })
       .catch(() => {});
   }, [initial?.id]);
 
@@ -720,8 +842,11 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     }));
   }
 
-  // The post-test is mandatory: every lecture must have one.
-  const quizActive = !hasQuiz;
+  function applyGenerated(list) {
+    const hasContent = mcqs.some((q) => q.question_text.trim());
+    if (hasContent && !window.confirm("سيتم استبدال الأسئلة الحالية بالأسئلة الجديدة. متابعة؟")) return;
+    setMcqs(list);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -730,12 +855,14 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
       setError("أضف محتوى علمياً واحداً على الأقل: رابط فيديو، أو رابط محاضرة PowerPoint، أو ملف شرائح صوتية.");
       return;
     }
-    if (quizActive) {
-      const msg = validateShortQuiz(mcqs);
-      if (msg) {
-        setError(msg);
-        return;
-      }
+    if (!form.program_id) {
+      setError("الرجاء اختيار البرنامج التدريبي الذي تتبع له المحاضرة.");
+      return;
+    }
+    const quizMsg = validateShortQuiz(mcqs);
+    if (quizMsg) {
+      setError(quizMsg);
+      return;
     }
     setLoading(true);
     try {
@@ -747,8 +874,13 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
         const res = await api.createLecture(payload);
         lectureId = res.id;
       }
-      if (quizActive && lectureId) {
-        await api.createQuiz(shortQuizPayload(lectureId, form.title, mcqs));
+      if (lectureId) {
+        const payload = shortQuizPayload(lectureId, form.title, mcqs);
+        if (existingQuiz) {
+          await api.updateQuiz({ id: existingQuiz.id, questions: payload.questions });
+        } else {
+          await api.createQuiz(payload);
+        }
       }
       onSaved();
     } catch (err) {
@@ -770,11 +902,13 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
         />
       </label>
       <label>
-        البرنامج التدريبي
+        البرنامج التدريبي *
         <select
+          required
           value={form.program_id}
           onChange={(e) => setForm({ ...form, program_id: e.target.value })}
         >
+          <option value="">— اختر البرنامج التدريبي —</option>
           {programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -874,18 +1008,12 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
         <div className="links-header">
           <span>📝 الاختبار البعدي Post-test (3 أسئلة اختيار من متعدد) *</span>
         </div>
-        {hasQuiz ? (
-          <p className="hint">
-            لهذه المحاضرة اختبار مسبق. يمكنك إدارته من زر "إدارة الاختبار".
-          </p>
-        ) : (
-          <>
-            <p className="hint">
-              إلزامي: يظهر للمتدرب بعد إكمال محتوى المحاضرة (الفيديو، محاضرة PowerPoint، أو الشرائح الصوتية).
-            </p>
-            <ShortQuizBuilder questions={mcqs} setQuestions={setMcqs} />
-          </>
-        )}
+        <p className="hint">
+          إلزامي: يظهر للمتدرب بعد إكمال محتوى المحاضرة (الفيديو، محاضرة PowerPoint، أو الشرائح الصوتية).
+          {existingQuiz ? " يمكنك تعديل الأسئلة والإجابات هنا ثم الحفظ." : ""}
+        </p>
+        <QuizGenerator deck={deck} title={form.title} onGenerated={applyGenerated} />
+        <ShortQuizBuilder questions={mcqs} setQuestions={setMcqs} />
       </div>
 
       <p className="hint full">
@@ -2447,8 +2575,10 @@ function ProgramsManagement() {
   const [programs, setPrograms] = useState([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [editing, setEditing] = useState(null); // {id, name, description}
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2465,33 +2595,101 @@ function ProgramsManagement() {
     load();
   }, [load]);
 
+  async function run(fn, okMsg) {
+    setError("");
+    setSuccess("");
+    try {
+      const data = await fn();
+      if (data?.programs) setPrograms(data.programs);
+      setSuccess(typeof okMsg === "function" ? okMsg(data) : okMsg);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    }
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
-    try {
-      await api.createProgram({ name, description });
+    const ok = await run(() => api.createProgram({ name, description }), "تمت إضافة البرنامج.");
+    if (ok) {
       setName("");
       setDescription("");
-      load();
-    } catch (err) {
-      alert(err.message);
     }
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    const ok = await run(() => api.updateProgram(editing), "تم حفظ التعديل.");
+    if (ok) setEditing(null);
+  }
+
+  async function handleDelete(p) {
+    if (!window.confirm(`حذف البرنامج «${p.name}»؟ المحاضرات التابعة له ستبقى لكن بدون برنامج.`)) return;
+    await run(
+      () => api.deleteProgram(p.id),
+      (d) =>
+        d?.unlinked_lectures
+          ? `تم حذف البرنامج. ${d.unlinked_lectures} محاضرة أصبحت بدون برنامج — عدّلها لاختيار برنامج جديد.`
+          : "تم حذف البرنامج.",
+    );
   }
 
   return (
     <div>
       <ErrorBox message={error} />
+      <SuccessBox message={success} />
       {loading ? (
         <Spinner />
+      ) : programs.length === 0 ? (
+        <p className="muted">لا توجد برامج تدريبية بعد. أضف أول برنامج بالأسفل.</p>
       ) : (
-        <ul className="simple-list">
-          {programs.map((p) => (
-            <li key={p.id}>
-              <strong>{p.name}</strong>
-              {p.description ? ` — ${p.description}` : ""}
-            </li>
-          ))}
+        <ul className="program-list">
+          {programs.map((p) =>
+            editing?.id === p.id ? (
+              <li key={p.id} className="program-item editing">
+                <form className="form-inline" onSubmit={handleSave}>
+                  <input
+                    required
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                  <input
+                    placeholder="وصف مختصر (اختياري)"
+                    value={editing.description || ""}
+                    onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                  />
+                  <button className="btn btn-primary btn-small" type="submit">
+                    حفظ
+                  </button>
+                  <button className="btn btn-small" type="button" onClick={() => setEditing(null)}>
+                    إلغاء
+                  </button>
+                </form>
+              </li>
+            ) : (
+              <li key={p.id} className="program-item">
+                <div className="program-text">
+                  <strong>{p.name}</strong>
+                  {p.description ? <span className="muted"> — {p.description}</span> : null}
+                </div>
+                <div className="program-actions">
+                  <button
+                    className="btn btn-small"
+                    onClick={() => setEditing({ id: p.id, name: p.name, description: p.description || "" })}
+                  >
+                    ✏️ تعديل
+                  </button>
+                  <button className="btn btn-danger btn-small" onClick={() => handleDelete(p)}>
+                    🗑 حذف
+                  </button>
+                </div>
+              </li>
+            ),
+          )}
         </ul>
       )}
+      <h4 className="section-title">إضافة برنامج تدريبي</h4>
       <form className="form-inline" onSubmit={handleAdd}>
         <input
           placeholder="اسم برنامج جديد"
@@ -2505,7 +2703,7 @@ function ProgramsManagement() {
           onChange={(e) => setDescription(e.target.value)}
         />
         <button className="btn btn-primary btn-small" type="submit">
-          إضافة
+          + إضافة
         </button>
       </form>
     </div>

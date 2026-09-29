@@ -1059,3 +1059,71 @@ textarea {
     width: 100%;
   }
 }
+
+/* ---------- Programs management ---------- */
+.program-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.program-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.program-item.editing {
+  background: #f0fdfa;
+  border-color: var(--primary);
+}
+.program-item.editing form {
+  flex: 1 1 100%;
+}
+.program-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---------- AI quiz generator ---------- */
+.quiz-generator {
+  margin: 8px 0 12px;
+}
+.btn-ai {
+  background: linear-gradient(135deg, #7c3aed, #0f766e);
+  color: #fff;
+  border: 0;
+}
+.btn-ai:hover {
+  filter: brightness(1.08);
+}
+.quiz-generator-box {
+  border: 1px dashed #a78bfa;
+  background: #faf5ff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gen-sources {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.file-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

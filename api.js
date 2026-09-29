@@ -52,6 +52,8 @@ export const api = {
 
   getPrograms: () => request('/api/programs', { auth: false }),
   createProgram: (payload) => request('/api/programs', { method: 'POST', body: payload }),
+  updateProgram: (payload) => request('/api/programs/update', { method: 'POST', body: payload }),
+  deleteProgram: (id) => request('/api/programs/delete', { method: 'POST', body: { id } }),
 
   getLectures: (programId) => request(`/api/lectures${programId ? `?program_id=${programId}` : ''}`),
   createLecture: (payload) => request('/api/lectures', { method: 'POST', body: payload }),
@@ -65,6 +67,8 @@ export const api = {
   getQuizzes: (lectureId) => request(`/api/quizzes?lecture_id=${lectureId}`),
   createQuiz: (payload) => request('/api/quizzes', { method: 'POST', body: payload }),
   deleteQuiz: (id) => request('/api/quizzes/delete', { method: 'POST', body: { id } }),
+  updateQuiz: (payload) => request('/api/quizzes/update', { method: 'POST', body: payload }),
+  generateQuiz: (payload) => request('/api/quizzes/generate', { method: 'POST', body: payload }),
   attemptQuiz: (payload) => request('/api/quizzes/attempt', { method: 'POST', body: payload }),
   getMyAttempts: () => request('/api/quizzes/attempts?mine=1'),
   getQuizAttempts: (quizId) => request(`/api/quizzes/attempts?quiz_id=${quizId}`),
