@@ -8,7 +8,7 @@
 //   GOOGLE_TTS_TIER    → "wavenet" (default, $4 / 1M chars, 4M free monthly)
 //                        or "chirp" (Chirp 3 HD, most natural, $30 / 1M chars, 1M free monthly)
 
-const ALLOWED_ORIGINS = ["https://edu.sharififcm.com", "https://edu-platform-fcm.netlify.app"];
+const ALLOWED_ORIGINS = ["https://edu.sharififcm.com", "https://edu-platform-frontend-bxa.pages.dev", "https://edu-platform-fcm.netlify.app"];
 const ITERATIONS = 100000;
 const TOKEN_LIFETIME_DAYS_LONG = 30;
 const TOKEN_LIFETIME_DAYS_SHORT = 1;
@@ -281,7 +281,19 @@ async function handleUsersPost(request, env) {
   const { username, status, role } = (await readJson(request)) || {};
   if (!username) return json({ ok: false, message: "اسم المستخدم مطلوب." }, 400);
   if (status && ["pending", "approved", "rejected"].includes(status)) {
+    const before = await env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
     await env.DB.prepare("UPDATE users SET status = ? WHERE username = ?").bind(status, username).run();
+    if (status === "approved" && before && before.status !== "approved" && before.email) {
+      await sendMail(env, {
+        to: before.email,
+        subject: "تم اعتماد حسابك — منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع",
+        html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
+          <p>مرحباً ${escapeHtml(before.name || username)}،</p>
+          <p>تم اعتماد حسابك في <b>منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع</b>.</p>
+          <p>يمكنك الآن تسجيل الدخول باسم المستخدم <b dir="ltr">${escapeHtml(username)}</b> ومتابعة المحاضرات:</p>
+          <p><a href="${SITE_URL}">${SITE_URL}</a></p></div>`,
+      });
+    }
   }
   if (role && ["trainee", "lecturer", "admin"].includes(role)) {
     await env.DB.prepare("UPDATE users SET role = ? WHERE username = ?").bind(role, username).run();
@@ -303,6 +315,55 @@ async function handleProgramsPost(request, env) {
   await env.DB.prepare("INSERT INTO programs (name, description) VALUES (?, ?)").bind(name.trim(), description || null).run();
   const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
   return json({ ok: true, programs: results });
+}
+
+async function handleProgramsUpdate(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { id, name, description } = (await readJson(request)) || {};
+  if (!id || !name || !String(name).trim()) return json({ ok: false, message: "اسم البرنامج مطلوب." }, 400);
+  await env.DB.prepare("UPDATE programs SET name = ?, description = ? WHERE id = ?").bind(String(name).trim(), description || null, id).run();
+  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
+  return json({ ok: true, programs: results });
+}
+
+async function handleProgramsDelete(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { id } = (await readJson(request)) || {};
+  if (!id) return json({ ok: false, message: "المعرف مطلوب." }, 400);
+  const used = await env.DB.prepare("SELECT COUNT(*) AS n FROM lectures WHERE program_id = ?").bind(id).first();
+  await env.DB.prepare("UPDATE lectures SET program_id = NULL WHERE program_id = ?").bind(id).run();
+  await env.DB.prepare("DELETE FROM programs WHERE id = ?").bind(id).run();
+  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
+  return json({ ok: true, programs: results, unlinked_lectures: used ? used.n : 0 });
+}
+
+/* ---------------- email (Resend) ---------------- */
+
+const SITE_URL = "https://edu.sharififcm.com";
+
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+async function sendMail(env, { to, subject, html }) {
+  if (!env.RESEND_API_KEY || !to) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: env.MAIL_FROM || "منصة التعليم الطبي <no-reply@sharififcm.com>",
+        to: [to],
+        subject,
+        html,
+      }),
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 /* ---------------- lectures ---------------- */
@@ -563,6 +624,114 @@ async function handleQuizDelete(request, env) {
   await env.DB.prepare("DELETE FROM quiz_questions WHERE quiz_id = ?").bind(id).run();
   await env.DB.prepare("DELETE FROM quizzes WHERE id = ?").bind(id).run();
   return json({ ok: true });
+}
+
+async function handleQuizUpdate(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || (caller.role !== "lecturer" && caller.role !== "admin")) return json({ ok: false, message: "ممنوع." }, 403);
+  const { id, title, questions } = (await readJson(request)) || {};
+  if (!id || !Array.isArray(questions) || !questions.length) return json({ ok: false, message: "بيانات الاختبار غير مكتملة." }, 400);
+  const quiz = await env.DB.prepare("SELECT q.id, l.lecturer_username FROM quizzes q JOIN lectures l ON l.id = q.lecture_id WHERE q.id = ?").bind(id).first();
+  if (!quiz) return json({ ok: false, message: "الاختبار غير موجود." }, 404);
+  if (caller.role !== "admin" && quiz.lecturer_username !== caller.username) return json({ ok: false, message: "ممنوع." }, 403);
+  if (title) await env.DB.prepare("UPDATE quizzes SET title = ? WHERE id = ?").bind(String(title).trim(), id).run();
+  await env.DB.prepare("DELETE FROM quiz_questions WHERE quiz_id = ?").bind(id).run();
+  let idx = 0;
+  for (const q of questions) {
+    await env.DB.prepare("INSERT INTO quiz_questions (quiz_id, question_text, type, options, order_index) VALUES (?, ?, ?, ?, ?)")
+      .bind(id, q.question_text, q.type || "single", JSON.stringify(q.options || []), idx++)
+      .run();
+  }
+  return json({ ok: true, id });
+}
+
+const QUIZ_PROMPT = (count, title) =>
+  `You are a family medicine educator writing a post-test for the lecture "${title || ""}".
+Write exactly ${count} multiple-choice questions (MCQs) that test the key learning points of the lecture text provided by the user.
+Rules:
+- Use the same language as the lecture text (Arabic or English). Keep medical terms accurate.
+- Each question has exactly 4 options, only one correct. Plausible distractors, no "all of the above".
+- Base every question only on the lecture content.
+Return ONLY valid JSON, no markdown, in this exact shape:
+{"questions":[{"question":"...","options":["...","...","...","..."],"correct":0}]}
+where "correct" is the 0-based index of the correct option.`;
+
+function parseQuizJson(raw, count) {
+  if (!raw) return null;
+  let txt = String(raw).trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const a = txt.indexOf("{"), b = txt.lastIndexOf("}");
+  if (a >= 0 && b > a) txt = txt.slice(a, b + 1);
+  let data;
+  try { data = JSON.parse(txt); } catch (e) { return null; }
+  const list = Array.isArray(data) ? data : data.questions;
+  if (!Array.isArray(list)) return null;
+  const out = [];
+  for (const q of list) {
+    const options = (q.options || q.choices || []).map((o) => String(typeof o === "object" ? o.text : o).trim()).filter(Boolean).slice(0, 4);
+    const text = String(q.question || q.question_text || "").trim();
+    let correct = Number(q.correct ?? q.answer ?? 0);
+    if (!Number.isInteger(correct) || correct < 0 || correct >= options.length) correct = 0;
+    if (text && options.length >= 2) out.push({ question: text, options, correct });
+  }
+  return out.length ? out.slice(0, count) : null;
+}
+
+async function generateWithOpenAI(env, system, text) {
+  if (!env.OPENAI_API_KEY) return null;
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: env.QUIZ_MODEL || "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+      messages: [{ role: "system", content: system }, { role: "user", content: text }],
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || null;
+}
+
+async function generateWithWorkersAI(env, system, text) {
+  if (!env.AI) return null;
+  const out = await env.AI.run(env.QUIZ_AI_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+    messages: [{ role: "system", content: system }, { role: "user", content: text }],
+    max_tokens: 1500,
+    temperature: 0.4,
+  });
+  if (!out) return null;
+  if (typeof out.response === "string") return out.response;
+  if (out.response && typeof out.response === "object") return JSON.stringify(out.response);
+  return null;
+}
+
+async function handleQuizGenerate(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || (caller.role !== "lecturer" && caller.role !== "admin")) return json({ ok: false, message: "ممنوع." }, 403);
+  const { text, title, count } = (await readJson(request)) || {};
+  const content = String(text || "").trim();
+  if (content.length < 80) return json({ ok: false, message: "نص المحاضرة قصير جداً لتوليد الأسئلة." }, 400);
+  if (!env.OPENAI_API_KEY && !env.AI) {
+    return json({ ok: false, code: "ai_not_configured", message: "خدمة الذكاء الاصطناعي غير مفعّلة على الخادم." }, 503);
+  }
+  const n = Math.min(Math.max(Number(count) || 3, 1), 10);
+  const system = QUIZ_PROMPT(n, title);
+  const body = `Lecture text:\n${content.slice(0, 24000)}`;
+  let questions = null;
+  let provider = null;
+  try {
+    questions = parseQuizJson(await generateWithOpenAI(env, system, body), n);
+    if (questions) provider = "openai";
+  } catch (e) { /* fall through */ }
+  if (!questions) {
+    try {
+      questions = parseQuizJson(await generateWithWorkersAI(env, system, body), n);
+      if (questions) provider = "workers-ai";
+    } catch (e) { /* fall through */ }
+  }
+  if (!questions) return json({ ok: false, message: "تعذّر توليد الأسئلة الآن، حاول مرة أخرى أو اكتبها يدوياً." }, 502);
+  return json({ ok: true, provider, questions });
 }
 
 async function handleQuizAttempt(request, env) {
@@ -946,6 +1115,8 @@ export default {
       "POST /api/users": () => handleUsersPost(request, env),
       "GET /api/programs": () => handleProgramsGet(env),
       "POST /api/programs": () => handleProgramsPost(request, env),
+      "POST /api/programs/update": () => handleProgramsUpdate(request, env),
+      "POST /api/programs/delete": () => handleProgramsDelete(request, env),
       "GET /api/lectures": () => handleLecturesGet(request, env),
       "POST /api/lectures": () => handleLecturesCreate(request, env),
       "POST /api/lectures/update": () => handleLecturesUpdate(request, env),
@@ -957,6 +1128,8 @@ export default {
       "GET /api/quizzes": () => handleQuizzesGet(request, env),
       "POST /api/quizzes": () => handleQuizzesCreate(request, env),
       "POST /api/quizzes/delete": () => handleQuizDelete(request, env),
+      "POST /api/quizzes/update": () => handleQuizUpdate(request, env),
+      "POST /api/quizzes/generate": () => handleQuizGenerate(request, env),
       "POST /api/quizzes/attempt": () => handleQuizAttempt(request, env),
       "GET /api/quizzes/attempts": () => handleQuizAttemptsGet(request, env),
       "POST /api/feedback": () => handleFeedbackPost(request, env),
