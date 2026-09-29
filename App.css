@@ -1127,3 +1127,16 @@ textarea {
   align-items: center;
   gap: 4px;
 }
+
+.retake-note {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-weight: 600;
+}
+.quiz-result .btn {
+  margin-top: 6px;
+}

@@ -1345,6 +1345,64 @@ function openCertificate({ user, lecture, attempt }) {
   w.document.close();
 }
 
+/* ---------------- Post-test attempts: one original + one retake ---------------- */
+
+const MAX_QUIZ_ATTEMPTS = 2;
+
+function PostTestAttempts({ quiz, attempts, onSubmitted }) {
+  const [retakeOpen, setRetakeOpen] = useState(false);
+  const sorted = [...attempts].sort((a, b) => Number(a.id) - Number(b.id));
+  const n = sorted.length;
+  const passed = sorted.find((a) => Number(a.passed) === 1);
+  const last = sorted[n - 1];
+  const canRetake = !passed && n > 0 && n < MAX_QUIZ_ATTEMPTS;
+
+  if (n === 0 || (canRetake && retakeOpen)) {
+    return (
+      <>
+        {n > 0 && (
+          <p className="retake-note">
+            ↻ المحاولة الثانية والأخيرة — لن تتاح إعادة أخرى بعدها.
+          </p>
+        )}
+        <TakeQuiz key={`${quiz.id}-${n}`} quiz={quiz} alreadyAttempted={false} onSubmitted={onSubmitted} />
+      </>
+    );
+  }
+
+  if (passed) {
+    return (
+      <div className="quiz-result pass">
+        <h4>🎉 اجتزت الاختبار بنجاح</h4>
+        <p>
+          النتيجة: {passed.score}%{n > 1 ? " (في المحاولة الثانية)" : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="quiz-result fail">
+      <h4>لم تحقق درجة النجاح المطلوبة ({quiz.pass_score || 60}%)</h4>
+      <p>
+        نتيجة {n > 1 ? "المحاولة الثانية" : "المحاولة الأولى"}: {last.score}%
+      </p>
+      {canRetake ? (
+        <>
+          <p className="muted">يمكنك إعادة الاختبار مرة واحدة فقط.</p>
+          <button className="btn btn-primary" onClick={() => setRetakeOpen(true)}>
+            ↻ إعادة الاختبار (المحاولة الأخيرة)
+          </button>
+        </>
+      ) : (
+        <p className="muted">
+          استنفدت المحاولات المتاحة (محاولة أصلية + إعادة واحدة). للمساعدة تواصل مع المشرف.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Leave guard (mandatory post-test) ---------------- */
 
 let leaveGuardMessage = null;
@@ -2079,10 +2137,10 @@ function LectureDetail({ lecture, user, onBack }) {
           )}
           {contentDone &&
             quizzes.map((quiz) => (
-              <TakeQuiz
+              <PostTestAttempts
                 key={quiz.id}
                 quiz={quiz}
-                alreadyAttempted={attemptedQuizIds.includes(quiz.id)}
+                attempts={myAttempts.filter((a) => a.quiz_id === quiz.id)}
                 onSubmitted={() => handleQuizSubmitted(quiz.id)}
               />
             ))}
