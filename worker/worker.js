@@ -162,6 +162,7 @@ async function lectureOpenForTrainee(env, lectureId) {
 }
 
 const CLOSED_MSG = "انتهت فترة إتاحة هذه المحاضرة.";
+const MAX_QUIZ_ATTEMPTS = 2; // original attempt + one retake
 
 /* ---------------- auth ---------------- */
 
@@ -742,7 +743,12 @@ async function handleQuizAttempt(request, env) {
   const quiz = await env.DB.prepare("SELECT * FROM quizzes WHERE id = ?").bind(quiz_id).first();
   if (!quiz) return json({ ok: false, message: "الاختبار غير موجود." }, 404);
   if (caller.role === "trainee" && !(await lectureOpenForTrainee(env, quiz.lecture_id))) return json({ ok: false, message: CLOSED_MSG }, 403);
-  if (!quiz.allow_retake) {
+  if (caller.role === "trainee") {
+    // One original attempt + one retake (only after a failed attempt).
+    const { results: prev } = await env.DB.prepare("SELECT passed FROM quiz_attempts WHERE quiz_id = ? AND username = ?").bind(quiz_id, caller.username).all();
+    if (prev.some((a) => Number(a.passed) === 1)) return json({ ok: false, message: "لقد اجتزت هذا الاختبار مسبقاً." }, 403);
+    if (prev.length >= MAX_QUIZ_ATTEMPTS) return json({ ok: false, message: "استنفدت المحاولات المتاحة (محاولة أصلية + إعادة واحدة)." }, 403);
+  } else if (!quiz.allow_retake) {
     const prev = await env.DB.prepare("SELECT id FROM quiz_attempts WHERE quiz_id = ? AND username = ?").bind(quiz_id, caller.username).first();
     if (prev) return json({ ok: false, message: "لا يمكن إعادة هذا الاختبار." }, 403);
   }
