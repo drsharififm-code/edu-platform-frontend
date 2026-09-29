@@ -401,17 +401,19 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
         // Prefetch next slide's audio
         if (i + 1 < slides.length) getAudioUrl(i + 1).catch(() => {});
       } catch (err) {
-        if (err.code === "tts_not_configured") {
-          setMode("browser");
-          speakWithBrowser(text, onEnd, voice);
-        } else if (err.name === "NotAllowedError") {
+        if (err.name === "NotAllowedError") {
           playingRef.current = false;
           setPlaying(false);
           setError("اضغط زر التشغيل لبدء القراءة الصوتية.");
         } else {
-          setError(err.message || "تعذّر تشغيل الصوت.");
-          playingRef.current = false;
-          setPlaying(false);
+          // AI voice not configured or unavailable (e.g. no credit) → browser voice.
+          setMode("browser");
+          const ok = speakWithBrowser(text, onEnd, voice);
+          if (!ok) {
+            setError(err.message || "تعذّر تشغيل الصوت.");
+            playingRef.current = false;
+            setPlaying(false);
+          }
         }
       } finally {
         setLoadingAudio(false);
