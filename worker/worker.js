@@ -1340,6 +1340,70 @@ async function handleTtsStatus(env) {
   });
 }
 
+/* ---------------- backups (monthly cron + manual download) ---------------- */
+
+const BACKUP_SKIP_TABLES = new Set(["tts_cache", "sessions", "password_resets"]);
+
+async function buildBackup(env) {
+  const { results: tables } = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name"
+  ).all();
+  const data = {};
+  const counts = {};
+  for (const { name } of tables) {
+    if (BACKUP_SKIP_TABLES.has(name) || !/^[A-Za-z0-9_]+$/.test(name)) continue;
+    const { results } = await env.DB.prepare(`SELECT * FROM "${name}"`).all();
+    data[name] = results;
+    counts[name] = results.length;
+  }
+  const createdAt = new Date().toISOString();
+  const json = JSON.stringify({ app: "edu-platform", created_at: createdAt, counts, tables: data });
+  const gz = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+  const stamp = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+  return { bytes: new Uint8Array(gz), filename: `edu-platform-backup-${stamp}.json.gz`, counts, createdAt, rawSize: json.length };
+}
+
+async function runMonthlyBackup(env) {
+  const to = env.BACKUP_EMAIL || "dr.sharififm@gmail.com";
+  const b = await buildBackup(env);
+  if (!env.RESEND_API_KEY) return false;
+  const rows = Object.entries(b.counts)
+    .map(([t, n]) => `<tr><td style="padding:2px 10px">${escapeHtml(t)}</td><td style="padding:2px 10px">${n}</td></tr>`)
+    .join("");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: env.MAIL_FROM || "منصة التعليم الطبي <no-reply@sharififcm.com>",
+      to: [to],
+      subject: `نسخة احتياطية شهرية — منصة التعليم الطبي (${b.filename.slice(20, 30)})`,
+      html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
+        <p>مرفق النسخة الاحتياطية الشهرية لقاعدة بيانات المنصة. احفظ الملف في مكان آمن (مثل Google Drive).</p>
+        <table style="border-collapse:collapse;border:1px solid #ddd">${rows}</table>
+        <p style="color:#64748b">Monthly backup of the e-learning platform database (gzip JSON). Keep it in a safe place.</p></div>`,
+      attachments: [{ filename: b.filename, content: toB64(b.bytes) }],
+    }),
+  });
+  return res.ok;
+}
+
+async function handleAdminBackup(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const url = new URL(request.url);
+  if (url.searchParams.get("email")) {
+    const sent = await runMonthlyBackup(env);
+    return json(sent ? { ok: true, message: "تم إرسال النسخة الاحتياطية إلى البريد." } : { ok: false, message: "تعذّر إرسال البريد الآن." }, sent ? 200 : 502);
+  }
+  const b = await buildBackup(env);
+  return new Response(b.bytes, {
+    headers: {
+      "Content-Type": "application/gzip",
+      "Content-Disposition": `attachment; filename="${b.filename}"`,
+    },
+  });
+}
+
 /* ---------------- router ---------------- */
 
 export default {
@@ -1360,6 +1424,7 @@ export default {
       "POST /api/password/forgot": () => handlePasswordForgot(request, env),
       "POST /api/password/reset": () => handlePasswordReset(request, env),
       "GET /api/reports/personal": () => handlePersonalReport(request, env),
+      "GET /api/admin/backup": () => handleAdminBackup(request, env),
       "POST /api/programs/schedule": () => handleScheduleUpload(request, env),
       "POST /api/programs/schedule/delete": () => handleScheduleDelete(request, env),
       "GET /api/programs/schedule/file": () => handleScheduleFile(request, env),
@@ -1397,5 +1462,10 @@ export default {
     } catch (err) {
       return withCors(json({ ok: false, message: "خطأ في الخادم.", error: String((err && err.message) || err) }, 500), request);
     }
+  },
+
+  // Cron Trigger (Settings → Trigger events), e.g. "0 3 1 * *" = 1st of every month.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runMonthlyBackup(env));
   },
 };
