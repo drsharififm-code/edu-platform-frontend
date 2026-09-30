@@ -1376,3 +1376,54 @@ textarea {
 .report-filters .btn {
   flex: 0 0 auto;
 }
+
+/* ---------- Language toggle ---------- */
+.lang-toggle {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lang-toggle:hover {
+  background: #f0fdfa;
+}
+.lang-toggle-fixed {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.backup-panel {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+[dir="ltr"] .pw-toggle {
+  left: auto;
+  right: 6px;
+}
+[dir="ltr"] .pw-wrap input {
+  padding-left: 12px;
+  padding-right: 42px;
+}
+
+/* English (LTR) mode */
+[dir="ltr"] body {
+  direction: ltr;
+}
+[dir="ltr"] .data-table th,
+[dir="ltr"] .data-table td {
+  text-align: left;
+}
+@media (max-width: 600px) {
+  .auth-shell {
+    padding-top: 60px;
+  }
+}

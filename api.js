@@ -90,6 +90,14 @@ export const api = {
   getFeedback: (lectureId) => request(`/api/feedback?lecture_id=${lectureId}`),
 
   getStats: () => request('/api/stats'),
+  emailBackup: () => request('/api/admin/backup?email=1'),
+  downloadBackup: async () => {
+    const res = await fetch(`${API_BASE}/api/admin/backup`, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) throw new Error('تعذّر تنزيل النسخة الاحتياطية.');
+    const cd = res.headers.get('Content-Disposition') || '';
+    const name = (cd.match(/filename="([^"]+)"/) || [])[1] || 'edu-platform-backup.json.gz';
+    return { blob: await res.blob(), name };
+  },
   getAdminReport: (params = {}) => {
     const qs = new URLSearchParams();
     if (params.from) qs.set('from', params.from);

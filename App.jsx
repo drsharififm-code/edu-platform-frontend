@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken, API_BASE } from "./api.js";
+import { getLang, setLang, dateLocale } from "./i18n.js";
 import { SlidePlayer, parsePptx, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
 
 const PROGRAM_LOGO =
@@ -36,6 +37,80 @@ function SuccessBox({ message }) {
 
 function CopyrightMark({ className = "" }) {
   return <div className={`copyright-mark ${className}`}>{COPYRIGHT}</div>;
+}
+
+function LangToggle({ className = "" }) {
+  const lang = getLang();
+  return (
+    <button
+      type="button"
+      className={`lang-toggle ${className}`}
+      title={lang === "en" ? "التبديل إلى العربية" : "Switch to English"}
+      onClick={() => {
+        setLang(lang === "en" ? "ar" : "en");
+        window.location.reload();
+      }}
+    >
+      🌐 {lang === "en" ? "العربية" : "English"}
+    </button>
+  );
+}
+
+function BackupPanel() {
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  async function download() {
+    setBusy("dl");
+    setErr("");
+    setMsg("");
+    try {
+      const { blob, name } = await api.downloadBackup();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      setMsg("تم تنزيل النسخة الاحتياطية.");
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+  async function email() {
+    setBusy("em");
+    setErr("");
+    setMsg("");
+    try {
+      const r = await api.emailBackup();
+      setMsg(r.message);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+  return (
+    <div className="backup-panel">
+      <h4 className="section-title">💾 النسخ الاحتياطي</h4>
+      <p className="hint">
+        تُرسل نسخة احتياطية كاملة من قاعدة البيانات تلقائياً إلى بريد المشرف في اليوم الأول من كل شهر. ويمكنك أخذ نسخة الآن.
+      </p>
+      <ErrorBox message={err} />
+      <SuccessBox message={msg} />
+      <div className="form-actions">
+        <button className="btn btn-small" disabled={!!busy} onClick={download}>
+          {busy === "dl" ? <Spinner /> : "⬇ تنزيل نسخة الآن"}
+        </button>
+        <button className="btn btn-small" disabled={!!busy} onClick={email}>
+          {busy === "em" ? <Spinner /> : "📧 إرسال نسخة إلى بريدي"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 const JOB_TITLES = ["SHO", "REGISTRAR", "SENIOR REGISTRAR", "CONSULTANT", "TRAINEE"];
@@ -381,6 +456,7 @@ function ResetPasswordPage({ token, onDone }) {
   return (
     <div className="auth-shell">
       <div className="auth-card">
+        <LangToggle className="lang-toggle-fixed" />
         <div className="auth-logo">🔑</div>
         <h1 className="auth-title">تعيين كلمة مرور جديدة</h1>
         <ErrorBox message={error} />
@@ -412,7 +488,7 @@ function ResetPasswordPage({ token, onDone }) {
 /* ---------------- date helpers (Gregorian calendar) ---------------- */
 
 // All dates are shown in the Gregorian (ميلادي) calendar, Saudi time.
-const DATE_LOCALE = "ar-SA-u-ca-gregory-nu-latn";
+const DATE_LOCALE = dateLocale();
 const TZ = "Asia/Riyadh";
 
 function parseDbDate(s) {
@@ -549,6 +625,7 @@ function AuthPage({ onLoggedIn }) {
 
   return (
     <div className="auth-shell">
+      <LangToggle className="lang-toggle-fixed" />
       <div className="auth-card">
         <div className="auth-logo">🎓</div>
         <h1 className="auth-title">{PLATFORM_NAME}</h1>
@@ -2558,7 +2635,7 @@ function LectureDetail({ lecture, user, onBack }) {
               {quizDone ? "✅" : contentDone ? "📝" : "🔒"}
             </span>
             <div className="posttest-title">
-              <strong>الاختبار البعدي <bdi>(Post-test)</bdi></strong>
+              <strong>{getLang() === "en" ? "Post-test" : <>الاختبار البعدي <bdi>(Post-test)</bdi></>}</strong>
               <span className="posttest-sub">
                 {quizDone
                   ? "تم أداء الاختبار"
@@ -3659,6 +3736,7 @@ function AdminDashboard({ user }) {
       </div>
       <ErrorBox message={error} />
       {tab === "stats" && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
+      {tab === "stats" && <BackupPanel />}
       {tab === "users" && <UsersManagement />}
       {tab === "programs" && <ProgramsManagement />}
       {tab === "lectures" && (
@@ -3711,6 +3789,7 @@ export default function App() {
     }
     setToken(null);
     setUser(null);
+    setView("home");
   }, []);
 
   if (resetToken) {
@@ -3763,6 +3842,7 @@ export default function App() {
           <div className="app-header-user-row">
             <span className="app-header-username">{user.name}</span>
             <Badge tone="info">{ROLE_LABELS[user.role]}</Badge>
+            <LangToggle className="btn btn-small" />
             <button
               className="btn btn-small"
               onClick={() => confirmLeave() && handleLogout()}
