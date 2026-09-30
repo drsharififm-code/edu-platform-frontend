@@ -51,6 +51,17 @@ export const api = {
   updateUser: (payload) => request('/api/users', { method: 'POST', body: payload }),
   deleteUser: (username) => request('/api/users/delete', { method: 'POST', body: { username } }),
   getLecturers: () => request('/api/lecturers'),
+  sendResetLink: (username) => request('/api/users/send-reset', { method: 'POST', body: { username } }),
+  forgotPassword: (identifier) => request('/api/password/forgot', { method: 'POST', body: { identifier }, auth: false }),
+  resetPassword: (token, password) => request('/api/password/reset', { method: 'POST', body: { token, password }, auth: false }),
+  getPersonalReport: ({ employee_id, year } = {}) => {
+    const q = new URLSearchParams();
+    if (employee_id) q.set('employee_id', employee_id);
+    if (year) q.set('year', year);
+    return request(`/api/reports/personal?${q.toString()}`);
+  },
+  uploadSchedule: (payload) => request('/api/programs/schedule', { method: 'POST', body: payload }),
+  deleteSchedule: (program_id) => request('/api/programs/schedule/delete', { method: 'POST', body: { program_id } }),
 
   getPrograms: () => request('/api/programs', { auth: false }),
   createProgram: (payload) => request('/api/programs', { method: 'POST', body: payload }),
@@ -111,4 +122,4 @@ export const api = {
   },
 };
 
-export { getToken };
+export { getToken, API_BASE };

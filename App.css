@@ -1064,32 +1064,244 @@ textarea {
 .program-list {
   list-style: none;
   padding: 0;
-  margin: 0 0 16px;
+  margin: 0 0 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .program-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
+  min-height: 132px;
 }
 .program-item.editing {
   background: #f0fdfa;
   border-color: var(--primary);
 }
-.program-item.editing form {
-  flex: 1 1 100%;
+.program-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.program-text strong {
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.program-desc,
+.program-schedule {
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .program-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.program-actions .btn {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.program-edit-form,
+.program-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.program-edit-form label,
+.program-add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.program-edit-form .program-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 600px) {
+  .program-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.file-btn.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.danger-link {
+  color: var(--danger) !important;
+  align-self: flex-start;
+}
+
+/* ---------- Schedule viewer ---------- */
+.schedule-viewer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #f8fafc;
+}
+.schedule-viewer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.schedule-viewer-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+}
+.schedule-frame {
+  position: relative;
+  width: 100%;
+  height: 70vh;
+  min-height: 360px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+.schedule-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ---------- Password field / select-other / links ---------- */
+.pw-wrap {
+  position: relative;
+  display: block;
+}
+.pw-wrap input {
+  width: 100%;
+  padding-left: 42px;
+}
+.pw-toggle {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+}
+.select-other {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.link-btn {
+  background: none;
+  border: 0;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 4px 0;
+  font: inherit;
+  text-decoration: underline;
+  align-self: center;
+}
+
+/* ---------- Personal report ---------- */
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+.report-person {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 10px;
+}
+.report-person strong {
+  font-size: 1.15rem;
+}
+.stat-card.highlight {
+  border: 2px solid var(--primary);
+  background: #f0fdfa;
+}
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.progress-bar > div {
+  height: 100%;
+  background: var(--primary);
+}
+.week-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.week-list li {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr 56px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.week-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.week-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+.week-count {
+  text-align: center;
+  font-weight: 700;
+}
+@media (max-width: 600px) {
+  .week-list li {
+    grid-template-columns: 1fr 48px;
+  }
+  .week-list .week-bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+@media print {
+  .app-header,
+  .sub-tabs,
+  .report-filters,
+  .form-actions {
+    display: none !important;
+  }
 }
 
 /* ---------- AI quiz generator ---------- */
@@ -1139,4 +1351,28 @@ textarea {
 }
 .quiz-result .btn {
   margin-top: 6px;
+}
+.report-cards .stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.link-btn.inline {
+  display: inline;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.program-actions .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.form.report-filters {
+  flex-direction: row;
+}
+.report-filters label {
+  flex: 1 1 180px;
+}
+.report-filters .btn {
+  flex: 0 0 auto;
 }

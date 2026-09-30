@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { api, setToken, getToken } from "./api.js";
+import { api, setToken, getToken, API_BASE } from "./api.js";
 import { SlidePlayer, parsePptx, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
 
 const PROGRAM_LOGO =
@@ -36,6 +36,377 @@ function SuccessBox({ message }) {
 
 function CopyrightMark({ className = "" }) {
   return <div className={`copyright-mark ${className}`}>{COPYRIGHT}</div>;
+}
+
+const JOB_TITLES = ["SHO", "REGISTRAR", "SENIOR REGISTRAR", "CONSULTANT", "TRAINEE"];
+const PROGRAM_PRESETS = ["Urgent", "Mental", "SBFM", "Women Health", "CPD", "Flexible SBFM", "Home Care"];
+const OTHER = "__other__";
+
+function PasswordInput({ value, onChange, autoComplete, required, placeholder, minLength }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="pw-wrap">
+      <input
+        type={show ? "text" : "password"}
+        dir="ltr"
+        required={required}
+        minLength={minLength}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+      />
+      <button
+        type="button"
+        className="pw-toggle"
+        aria-label={show ? "إخفاء" : "إظهار"}
+        title={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+        onClick={(e) => {
+          e.preventDefault();
+          setShow((v) => !v);
+        }}
+      >
+        {show ? "🙈" : "👁"}
+      </button>
+    </span>
+  );
+}
+
+// Dropdown with preset options + "Others" (manual entry).
+function SelectOrOther({ options, value, onChange, required, placeholder = "— اختر —", otherLabel = "Others (أخرى — إدخال يدوي)" }) {
+  const isPreset = options.includes(value);
+  const [otherMode, setOtherMode] = useState(!!value && !isPreset);
+  useEffect(() => {
+    if (value && !options.includes(value)) setOtherMode(true);
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <span className="select-other">
+      <select
+        required={required && !otherMode}
+        value={otherMode ? OTHER : isPreset ? value : ""}
+        onChange={(e) => {
+          if (e.target.value === OTHER) {
+            setOtherMode(true);
+            onChange("");
+          } else {
+            setOtherMode(false);
+            onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        <option value={OTHER}>{otherLabel}</option>
+      </select>
+      {otherMode && (
+        <input
+          required={required}
+          autoFocus
+          placeholder="اكتب القيمة يدوياً"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </span>
+  );
+}
+
+function scheduleFileUrl(schedule, download = false) {
+  if (!schedule) return "";
+  return `${API_BASE}/api/programs/schedule/file?id=${schedule.id}&k=${encodeURIComponent(schedule.key)}${download ? "&download=1" : ""}`;
+}
+
+function ScheduleViewer({ program, onClose }) {
+  const sch = program.schedule;
+  const isPdf = /\.pdf$/i.test(sch.filename) || sch.mime === "application/pdf";
+  const url = scheduleFileUrl(sch);
+  const src = isPdf ? url : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  return (
+    <div className="schedule-viewer">
+      <div className="schedule-viewer-head">
+        <strong>📅 جدول محاضرات برنامج «{program.name}»</strong>
+        <div className="schedule-viewer-actions">
+          <a className="btn btn-small" href={scheduleFileUrl(sch, true)} target="_blank" rel="noreferrer">
+            ⬇ تحميل
+          </a>
+          <a className="btn btn-small" href={isPdf ? url : src} target="_blank" rel="noreferrer">
+            ↗ نافذة جديدة
+          </a>
+          {onClose && (
+            <button className="btn btn-small" onClick={onClose}>
+              ✕ إغلاق
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="schedule-frame">
+        <iframe src={src} title="schedule" />
+      </div>
+      <p className="hint">{sch.filename}</p>
+    </div>
+  );
+}
+
+/* ---------------- Personal annual report ---------------- */
+
+function isoWeek(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+}
+
+function weekRange(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const day = d.getUTCDay(); // Sunday-based week (Saudi work week)
+  const start = new Date(d);
+  start.setUTCDate(d.getUTCDate() - day);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  const f = (x) => x.toISOString().slice(0, 10);
+  return { key: f(start), label: `${fmtDay(f(start))} – ${fmtDay(f(end))}` };
+}
+
+function PersonalReport({ isAdmin }) {
+  const thisYear = Number(todayLocal().slice(0, 4));
+  const [year, setYear] = useState(thisYear);
+  const [employeeId, setEmployeeId] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(
+    async (emp, yr) => {
+      setLoading(true);
+      setError("");
+      try {
+        setData(await api.getPersonalReport({ employee_id: emp, year: yr }));
+      } catch (err) {
+        setData(null);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isAdmin) load("", year);
+  }, [isAdmin, year, load]);
+
+  const weeks = useMemo(() => {
+    if (!data) return [];
+    const map = new Map();
+    for (const l of data.lectures) {
+      const w = weekRange(l.lecture_date);
+      if (!map.has(w.key)) map.set(w.key, { ...w, total: 0, attended: 0 });
+      const e = map.get(w.key);
+      e.total += 1;
+      if (l.attended) e.attended += 1;
+    }
+    return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+  }, [data]);
+
+  const years = [];
+  for (let y = thisYear; y >= thisYear - 4; y--) years.push(y);
+
+  return (
+    <div className="personal-report">
+      <form
+        className="form report-filters"
+        onSubmit={(e) => {
+          e.preventDefault();
+          load(employeeId.trim(), year);
+        }}
+      >
+        {isAdmin && (
+          <label>
+            الرقم الوظيفي
+            <input
+              required
+              dir="ltr"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              placeholder="مثال: 149560"
+            />
+          </label>
+        )}
+        <label>
+          السنة (ميلادي)
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </label>
+        {isAdmin && (
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            {loading ? <Spinner /> : "عرض التقرير"}
+          </button>
+        )}
+      </form>
+      <ErrorBox message={error} />
+      {loading && !data && <Spinner />}
+      {data && (
+        <>
+          <div className="report-person">
+            <strong>{data.user.name}</strong>
+            <span className="muted">
+              {data.user.employee_id ? `الرقم الوظيفي: ${data.user.employee_id}` : ""}
+              {data.user.job_title ? ` • ${data.user.job_title}` : ""}
+              {data.user.hospital ? ` • ${data.user.hospital}` : ""}
+            </span>
+          </div>
+          <div className="stats-grid report-cards">
+            <div className="stat-card highlight">
+              <span className="stat-value">{data.summary.attendance_percent}%</span>
+              <span className="stat-label">نسبة حضور المحاضرات {data.year}</span>
+              <div className="progress-bar">
+                <div style={{ width: `${data.summary.attendance_percent}%` }} />
+              </div>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">
+                {data.summary.attended} / {data.summary.total_lectures}
+              </span>
+              <span className="stat-label">محاضرات حضرها / المحاضرات المعتمدة</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">{data.summary.passed}</span>
+              <span className="stat-label">اختبارات اجتازها</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-value">
+                {data.summary.average_score == null ? "-" : `${data.summary.average_score}%`}
+              </span>
+              <span className="stat-label">متوسط درجات الاختبار البعدي</span>
+            </div>
+          </div>
+          <p className="hint">
+            يُعد المتدرب حاضراً للمحاضرة عند إكمالها وأداء اختبارها البعدي. يتحدث التقرير تلقائياً مع كل محاضرة، وتبقى بيانات السنة كاملة.
+          </p>
+
+          <h4 className="section-title">المتابعة الأسبوعية</h4>
+          {weeks.length === 0 ? (
+            <p className="muted">لا توجد محاضرات معتمدة في هذه السنة.</p>
+          ) : (
+            <ul className="week-list">
+              {weeks.map((w) => (
+                <li key={w.key}>
+                  <span className="week-label">الأسبوع {w.label}</span>
+                  <span className="week-bar">
+                    <span style={{ width: `${Math.round((w.attended / w.total) * 100)}%` }} />
+                  </span>
+                  <span className="week-count">
+                    {w.attended} / {w.total}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h4 className="section-title">تفاصيل المحاضرات</h4>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>المحاضرة</th>
+                  <th>البرنامج</th>
+                  <th>الحضور</th>
+                  <th>تاريخ الإكمال</th>
+                  <th>الدرجة</th>
+                  <th>النتيجة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lectures.map((l) => (
+                  <tr key={l.id}>
+                    <td>{fmtDay(l.lecture_date)}</td>
+                    <td>{l.title}</td>
+                    <td>{l.program_name || "-"}</td>
+                    <td>{l.attended ? "✅ حضر" : l.viewed ? "🟡 بدأ ولم يكمل" : "❌ لم يحضر"}</td>
+                    <td>{l.attended_at ? fmtDate(l.attended_at) : "-"}</td>
+                    <td>{l.best_score == null ? "-" : `${l.best_score}%`}</td>
+                    <td>{l.passed == null ? "-" : l.passed ? "ناجح" : "لم يجتز"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-small" onClick={() => window.print()}>
+              🖨 طباعة التقرير
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Password reset page (from email link) ---------------- */
+
+function ResetPasswordPage({ token, onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    if (password.length < 6) return setError("كلمة المرور يجب ألا تقل عن 6 أحرف.");
+    if (password !== confirm) return setError("كلمتا المرور غير متطابقتين.");
+    setLoading(true);
+    try {
+      const res = await api.resetPassword(token, password);
+      setSuccess(res.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <div className="auth-logo">🔑</div>
+        <h1 className="auth-title">تعيين كلمة مرور جديدة</h1>
+        <ErrorBox message={error} />
+        <SuccessBox message={success} />
+        {success ? (
+          <button className="btn btn-primary" onClick={onDone}>
+            الذهاب لتسجيل الدخول
+          </button>
+        ) : (
+          <form className="form" onSubmit={submit}>
+            <label>
+              كلمة المرور الجديدة
+              <PasswordInput required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <label>
+              تأكيد كلمة المرور
+              <PasswordInput required minLength={6} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            </label>
+            <button className="btn btn-primary" disabled={loading} type="submit">
+              {loading ? <Spinner /> : "حفظ كلمة المرور"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ---------------- date helpers (Gregorian calendar) ---------------- */
@@ -132,6 +503,22 @@ function AuthPage({ onLoggedIn }) {
     }
   }
 
+  const [forgotId, setForgotId] = useState("");
+  async function handleForgot(e) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+    try {
+      const res = await api.forgotPassword(forgotId.trim());
+      setSuccess(res.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSignup(e) {
     e.preventDefault();
     setError("");
@@ -208,9 +595,9 @@ function AuthPage({ onLoggedIn }) {
             </label>
             <label>
               كلمة المرور
-              <input
+              <PasswordInput
                 required
-                type="password"
+                autoComplete="current-password"
                 value={loginForm.password}
                 onChange={(e) =>
                   setLoginForm({ ...loginForm, password: e.target.value })
@@ -233,6 +620,39 @@ function AuthPage({ onLoggedIn }) {
               type="submit"
             >
               {loading ? <Spinner /> : "دخول"}
+            </button>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setMode("forgot");
+                setError("");
+                setSuccess("");
+              }}
+            >
+              نسيت كلمة المرور؟
+            </button>
+          </form>
+        ) : mode === "forgot" ? (
+          <form onSubmit={handleForgot} className="form">
+            <p className="hint">
+              أدخل اسم المستخدم أو البريد الإلكتروني المسجل، وسنرسل لك رابطاً لتعيين كلمة مرور جديدة.
+            </p>
+            <label>
+              اسم المستخدم أو البريد الإلكتروني
+              <input
+                required
+                dir="ltr"
+                autoCapitalize="none"
+                value={forgotId}
+                onChange={(e) => setForgotId(e.target.value)}
+              />
+            </label>
+            <button className="btn btn-primary" disabled={loading} type="submit">
+              {loading ? <Spinner /> : "إرسال رابط إعادة التعيين"}
+            </button>
+            <button type="button" className="link-btn" onClick={() => setMode("login")}>
+              ← العودة لتسجيل الدخول
             </button>
           </form>
         ) : (
@@ -311,9 +731,8 @@ function AuthPage({ onLoggedIn }) {
             </label>
             <label>
               كلمة المرور *
-              <input
+              <PasswordInput
                 required
-                type="password"
                 autoComplete="new-password"
                 value={signupForm.password}
                 onChange={(e) =>
@@ -333,11 +752,10 @@ function AuthPage({ onLoggedIn }) {
               </label>
               <label>
                 المسمى الوظيفي
-                <input
+                <SelectOrOther
+                  options={JOB_TITLES}
                   value={signupForm.job_title}
-                  onChange={(e) =>
-                    setSignupForm({ ...signupForm, job_title: e.target.value })
-                  }
+                  onChange={(v) => setSignupForm({ ...signupForm, job_title: v })}
                 />
               </label>
             </div>
@@ -421,8 +839,8 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
         </label>
         <label>
           كلمة مرور جديدة (اختياري)
-          <input
-            type="password"
+          <PasswordInput
+            autoComplete="new-password"
             placeholder="اتركه فارغاً لعدم التغيير"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -469,9 +887,10 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
         </label>
         <label>
           المسمى الوظيفي
-          <input
+          <SelectOrOther
+            options={JOB_TITLES}
             value={form.job_title}
-            onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+            onChange={(v) => setForm({ ...form, job_title: v })}
           />
         </label>
         <div className="form-actions">
@@ -2309,6 +2728,8 @@ function LectureCard({
 /* ---------------- Trainee dashboard ---------------- */
 
 function TraineeDashboard({ user }) {
+  const [view, setView] = useState("lectures");
+  const [showSchedule, setShowSchedule] = useState(false);
   const [programs, setPrograms] = useState([]);
   const [lectures, setLectures] = useState([]);
   const [programFilter, setProgramFilter] = useState("");
@@ -2349,15 +2770,32 @@ function TraineeDashboard({ user }) {
       />
     );
 
+  const currentProgram = programs.find((p) => String(p.id) === String(programFilter));
+
   return (
     <div className="panel">
+      <div className="sub-tabs">
+        <button className={view === "lectures" ? "tab active" : "tab"} onClick={() => setView("lectures")}>
+          📚 المحاضرات
+        </button>
+        <button className={view === "report" ? "tab active" : "tab"} onClick={() => setView("report")}>
+          📊 تقريري السنوي
+        </button>
+      </div>
+      {view === "report" ? (
+        <PersonalReport isAdmin={false} />
+      ) : (
+      <>
       <h2>المحاضرات المتاحة</h2>
       <div className="toolbar">
         <label>
-          تصفية حسب البرنامج
+          اختر البرنامج التدريبي
           <select
             value={programFilter}
-            onChange={(e) => setProgramFilter(e.target.value)}
+            onChange={(e) => {
+              setProgramFilter(e.target.value);
+              setShowSchedule(false);
+            }}
           >
             <option value="">جميع البرامج</option>
             {programs.map((p) => (
@@ -2367,7 +2805,18 @@ function TraineeDashboard({ user }) {
             ))}
           </select>
         </label>
+        {currentProgram?.schedule && !showSchedule && (
+          <button className="btn btn-primary btn-small" onClick={() => setShowSchedule(true)}>
+            📅 جدول المحاضرات السنوي
+          </button>
+        )}
       </div>
+      {currentProgram && !currentProgram.schedule && (
+        <p className="hint">لم يُرفق جدول محاضرات لهذا البرنامج بعد.</p>
+      )}
+      {currentProgram?.schedule && showSchedule && (
+        <ScheduleViewer program={currentProgram} onClose={() => setShowSchedule(false)} />
+      )}
       {loading && <Spinner />}
       <ErrorBox message={error} />
       {!loading && lectures.length === 0 && (
@@ -2383,6 +2832,8 @@ function TraineeDashboard({ user }) {
           />
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -2516,7 +2967,7 @@ function StatsCards({ stats }) {
     ["المستخدمون المفعّلون", stats.activeUsers],
     ["بانتظار الموافقة", stats.pendingUsers],
     ["إجمالي المحاضرات", stats.totalLectures],
-    ["المحاضرات الممتمدة", stats.approvedLectures],
+    ["المحاضرات المعتمدة", stats.approvedLectures],
     ["مسودات", stats.draftLectures],
     ["إجمالي المشاهدات", stats.totalViews],
     ["متوسط درجات الاختبارات", `${stats.avgQuizScore}%`],
@@ -2560,6 +3011,15 @@ function UsersManagement() {
     try {
       await api.updateUser({ username: u.username, status });
       load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+  async function sendReset(u) {
+    if (!window.confirm(`إرسال رابط إعادة تعيين كلمة المرور إلى ${u.email}؟`)) return;
+    try {
+      const res = await api.sendResetLink(u.username);
+      alert(res.message);
     } catch (err) {
       alert(err.message);
     }
@@ -2661,6 +3121,15 @@ function UsersManagement() {
                     🗑 حذف الحساب
                   </button>
                 )}
+                {u.email && u.status !== "rejected" && (
+                  <button
+                    className="btn btn-small"
+                    title="إرسال رابط إعادة تعيين كلمة المرور إلى بريد المستخدم"
+                    onClick={() => sendReset(u)}
+                  >
+                    🔑 إعادة تعيين كلمة المرور
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -2671,11 +3140,22 @@ function UsersManagement() {
   );
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("تعذّرت قراءة الملف."));
+    r.readAsDataURL(file);
+  });
+}
+
 function ProgramsManagement() {
   const [programs, setPrograms] = useState([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState(null); // {id, name, description}
+  const [viewing, setViewing] = useState(null); // program with schedule being previewed
+  const [uploadingId, setUploadingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -2711,7 +3191,8 @@ function ProgramsManagement() {
 
   async function handleAdd(e) {
     e.preventDefault();
-    const ok = await run(() => api.createProgram({ name, description }), "تمت إضافة البرنامج.");
+    if (!name.trim()) return setError("اختر اسم البرنامج أو اكتبه.");
+    const ok = await run(() => api.createProgram({ name: name.trim(), description }), "تمت إضافة البرنامج.");
     if (ok) {
       setName("");
       setDescription("");
@@ -2720,6 +3201,7 @@ function ProgramsManagement() {
 
   async function handleSave(e) {
     e.preventDefault();
+    if (!editing.name.trim()) return setError("اسم البرنامج مطلوب.");
     const ok = await run(() => api.updateProgram(editing), "تم حفظ التعديل.");
     if (ok) setEditing(null);
   }
@@ -2735,10 +3217,37 @@ function ProgramsManagement() {
     );
   }
 
+  async function handleUpload(p, e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/\.(pdf|xlsx|xls|csv)$/i.test(file.name)) return setError("الصيغ المسموحة: PDF أو Excel (xlsx / xls).");
+    if (file.size > 8 * 1024 * 1024) return setError("حجم الملف أكبر من 8 ميجابايت.");
+    setUploadingId(p.id);
+    try {
+      const data = await readFileAsDataUrl(file);
+      await run(
+        () => api.uploadSchedule({ program_id: p.id, filename: file.name, mime: file.type || null, data }),
+        `تم إرفاق جدول «${p.name}».`,
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function handleRemoveSchedule(p) {
+    if (!window.confirm(`حذف جدول برنامج «${p.name}»؟`)) return;
+    await run(() => api.deleteSchedule(p.id), "تم حذف الجدول.");
+    if (viewing?.id === p.id) setViewing(null);
+  }
+
   return (
-    <div>
+    <div className="programs-admin">
       <ErrorBox message={error} />
       <SuccessBox message={success} />
+      {viewing && <ScheduleViewer program={viewing} onClose={() => setViewing(null)} />}
       {loading ? (
         <Spinner />
       ) : programs.length === 0 ? (
@@ -2748,32 +3257,70 @@ function ProgramsManagement() {
           {programs.map((p) =>
             editing?.id === p.id ? (
               <li key={p.id} className="program-item editing">
-                <form className="form-inline" onSubmit={handleSave}>
-                  <input
-                    required
-                    value={editing.name}
-                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  />
-                  <input
-                    placeholder="وصف مختصر (اختياري)"
-                    value={editing.description || ""}
-                    onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                  />
-                  <button className="btn btn-primary btn-small" type="submit">
-                    حفظ
-                  </button>
-                  <button className="btn btn-small" type="button" onClick={() => setEditing(null)}>
-                    إلغاء
-                  </button>
+                <form className="form program-edit-form" onSubmit={handleSave}>
+                  <label>
+                    اسم البرنامج
+                    <SelectOrOther
+                      options={PROGRAM_PRESETS}
+                      value={editing.name}
+                      onChange={(v) => setEditing({ ...editing, name: v })}
+                    />
+                  </label>
+                  <label>
+                    الوصف
+                    <input
+                      placeholder="وصف مختصر (اختياري)"
+                      value={editing.description || ""}
+                      onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                    />
+                  </label>
+                  <div className="program-actions">
+                    <button className="btn btn-primary btn-small" type="submit">
+                      حفظ
+                    </button>
+                    <button className="btn btn-small" type="button" onClick={() => setEditing(null)}>
+                      إلغاء
+                    </button>
+                  </div>
                 </form>
               </li>
             ) : (
               <li key={p.id} className="program-item">
                 <div className="program-text">
                   <strong>{p.name}</strong>
-                  {p.description ? <span className="muted"> — {p.description}</span> : null}
+                  <span className="muted program-desc">{p.description || "—"}</span>
+                  <span className="program-schedule">
+                    {p.schedule ? (
+                      <>
+                        📅 {p.schedule.filename}{" "}
+                        <button className="link-btn danger-link inline" onClick={() => handleRemoveSchedule(p)}>
+                          (حذف الجدول)
+                        </button>
+                      </>
+                    ) : (
+                      <span className="muted">لا يوجد جدول مرفق</span>
+                    )}
+                  </span>
                 </div>
                 <div className="program-actions">
+                  <label className={`btn btn-small file-btn ${uploadingId === p.id ? "disabled" : ""}`}>
+                    {uploadingId === p.id ? "…جارٍ الرفع" : p.schedule ? "📎 تغيير الجدول" : "📎 إرفاق الجدول"}
+                    <input
+                      type="file"
+                      accept=".pdf,.xlsx,.xls,.csv"
+                      hidden
+                      disabled={uploadingId === p.id}
+                      onChange={(e) => handleUpload(p, e)}
+                    />
+                  </label>
+                  <button
+                    className="btn btn-small"
+                    disabled={!p.schedule}
+                    title={p.schedule ? "" : "لا يوجد جدول مرفق"}
+                    onClick={() => setViewing(p)}
+                  >
+                    👁 عرض الجدول
+                  </button>
                   <button
                     className="btn btn-small"
                     onClick={() => setEditing({ id: p.id, name: p.name, description: p.description || "" })}
@@ -2790,22 +3337,32 @@ function ProgramsManagement() {
         </ul>
       )}
       <h4 className="section-title">إضافة برنامج تدريبي</h4>
-      <form className="form-inline" onSubmit={handleAdd}>
-        <input
-          placeholder="اسم برنامج جديد"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          placeholder="وصف مختصر (اختياري)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <button className="btn btn-primary btn-small" type="submit">
-          + إضافة
+      <form className="form program-add-form" onSubmit={handleAdd}>
+        <label>
+          اسم البرنامج *
+          <SelectOrOther
+            required
+            options={PROGRAM_PRESETS}
+            value={name}
+            onChange={setName}
+            placeholder="— اختر البرنامج —"
+          />
+        </label>
+        <label>
+          الوصف
+          <input
+            placeholder="وصف مختصر (اختياري)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+        <button className="btn btn-primary" type="submit">
+          + إضافة البرنامج
         </button>
       </form>
+      <p className="hint">
+        بعد إضافة البرنامج استخدم «📎 إرفاق الجدول» لرفع جدول المحاضرات الشهري أو السنوي (PDF أو Excel) ليطّلع عليه المتدربون.
+      </p>
     </div>
   );
 }
@@ -2972,7 +3529,7 @@ function AttendanceReport() {
     <div>
       <ErrorBox message={error} />
       <div className="toolbar report-toolbar">
-        <div className="report-filters">
+        <div className="form report-filters">
           <label>
             من تاريخ
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -3093,6 +3650,12 @@ function AdminDashboard({ user }) {
         >
           تقرير المتابعة
         </button>
+        <button
+          className={tab === "personal" ? "tab active" : "tab"}
+          onClick={() => setTab("personal")}
+        >
+          التقرير الشخصي السنوي
+        </button>
       </div>
       <ErrorBox message={error} />
       {tab === "stats" && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
@@ -3102,6 +3665,7 @@ function AdminDashboard({ user }) {
         <LecturesModeration user={user} onOpen={setSelected} />
       )}
       {tab === "report" && <AttendanceReport />}
+      {tab === "personal" && <PersonalReport isAdmin />}
     </div>
   );
 }
@@ -3131,6 +3695,14 @@ export default function App() {
     restore();
   }, []);
 
+  const [resetToken, setResetToken] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("reset");
+    } catch (e) {
+      return null;
+    }
+  });
+
   const handleLogout = useCallback(async () => {
     try {
       await api.logout();
@@ -3140,6 +3712,20 @@ export default function App() {
     setToken(null);
     setUser(null);
   }, []);
+
+  if (resetToken) {
+    return (
+      <ResetPasswordPage
+        token={resetToken}
+        onDone={() => {
+          window.history.replaceState(null, "", window.location.pathname);
+          setResetToken(null);
+          setToken(null);
+          setUser(null);
+        }}
+      />
+    );
+  }
 
   if (checkingSession) {
     return (
@@ -3157,13 +3743,6 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-title">
-          <span className="header-logo-badge">
-            <img
-              src={PROGRAM_LOGO}
-              alt="شعار برنامج تطوير الرعاية الأولية والصحة المجتمعية"
-              className="header-logo-img"
-            />
-          </span>
           <span className="app-header-name">{PLATFORM_NAME}</span>
         </div>
         <nav className="app-header-nav">
