@@ -267,6 +267,212 @@ async function handleProfile(request, env) {
   return json({ ok: true, user: publicUser(updated) });
 }
 
+/* ---------------- password reset ---------------- */
+
+const RESET_TTL_MINUTES = 60;
+
+async function createAndSendReset(env, user) {
+  const token = newToken();
+  const expires = new Date(Date.now() + RESET_TTL_MINUTES * 60000).toISOString();
+  await env.DB.prepare("INSERT INTO password_resets (token, username, expires_at) VALUES (?, ?, ?)").bind(token, user.username, expires).run();
+  const link = `${SITE_URL}/?reset=${encodeURIComponent(token)}`;
+  return sendMail(env, {
+    to: user.email,
+    subject: "إعادة تعيين كلمة المرور — منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع",
+    html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
+      <p>مرحباً ${escapeHtml(user.name || user.username)}،</p>
+      <p>وصلنا طلب لإعادة تعيين كلمة المرور لحسابك (<b dir="ltr">${escapeHtml(user.username)}</b>).</p>
+      <p><a href="${link}" style="display:inline-block;background:#0f766e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">تعيين كلمة مرور جديدة</a></p>
+      <p style="color:#64748b">الرابط صالح لمدة ${RESET_TTL_MINUTES} دقيقة ولمرة واحدة. إذا لم تطلب ذلك فتجاهل هذه الرسالة.</p></div>`,
+  });
+}
+
+async function handlePasswordForgot(request, env) {
+  const { identifier } = (await readJson(request)) || {};
+  const id = String(identifier || "").trim();
+  const generic = json({ ok: true, message: "إذا كان الحساب موجوداً وله بريد مسجل، فستصلك رسالة لإعادة تعيين كلمة المرور خلال دقائق." });
+  if (!id) return json({ ok: false, message: "أدخل اسم المستخدم أو البريد الإلكتروني." }, 400);
+  const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? OR lower(email) = lower(?)").bind(id, id).first();
+  if (!user || !user.email || user.status === "rejected") return generic;
+  const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM password_resets WHERE username = ? AND created_at > datetime('now','-15 minutes')").bind(user.username).first();
+  if (recent && recent.n >= 3) return generic;
+  await createAndSendReset(env, user);
+  return generic;
+}
+
+async function handlePasswordReset(request, env) {
+  const { token, password } = (await readJson(request)) || {};
+  if (!token) return json({ ok: false, message: "رابط غير صالح." }, 400);
+  if (!password || String(password).length < 6) return json({ ok: false, message: "كلمة المرور يجب ألا تقل عن 6 أحرف." }, 400);
+  const row = await env.DB.prepare("SELECT * FROM password_resets WHERE token = ?").bind(token).first();
+  if (!row || row.used || row.expires_at < new Date().toISOString()) {
+    return json({ ok: false, message: "انتهت صلاحية الرابط أو استُخدم مسبقاً. اطلب رابطاً جديداً." }, 400);
+  }
+  await env.DB.prepare("UPDATE users SET password_hash = ? WHERE username = ?").bind(await hashPassword(String(password)), row.username).run();
+  await env.DB.prepare("UPDATE password_resets SET used = 1 WHERE username = ?").bind(row.username).run();
+  await env.DB.prepare("DELETE FROM sessions WHERE username = ?").bind(row.username).run();
+  return json({ ok: true, message: "تم تعيين كلمة المرور الجديدة. يمكنك تسجيل الدخول الآن." });
+}
+
+async function handleUsersSendReset(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { username } = (await readJson(request)) || {};
+  const user = await env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username || "").first();
+  if (!user) return json({ ok: false, message: "المستخدم غير موجود." }, 404);
+  if (!user.email) return json({ ok: false, message: "لا يوجد بريد إلكتروني مسجل لهذا المستخدم." }, 400);
+  if (!env.RESEND_API_KEY) return json({ ok: false, message: "خدمة البريد غير مفعّلة على الخادم." }, 503);
+  const sent = await createAndSendReset(env, user);
+  if (!sent) return json({ ok: false, message: "تعذّر إرسال البريد الآن." }, 502);
+  return json({ ok: true, message: `تم إرسال رابط إعادة التعيين إلى ${user.email}` });
+}
+
+/* ---------------- personal annual report ---------------- */
+
+async function handlePersonalReport(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller) return json({ ok: false, message: "غير مسجل الدخول." }, 401);
+  const url = new URL(request.url);
+  const year = Number(url.searchParams.get("year")) || Number(new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 4));
+  let user = caller;
+  if (caller.role === "admin") {
+    const emp = String(url.searchParams.get("employee_id") || "").trim();
+    if (emp) {
+      user = await env.DB.prepare("SELECT * FROM users WHERE lower(trim(employee_id)) = lower(?)").bind(emp).first();
+      if (!user) return json({ ok: false, message: "لا يوجد مستخدم بهذا الرقم الوظيفي." }, 404);
+    }
+  }
+  const { results } = await env.DB.prepare(
+    `SELECT l.id, l.title, l.lecturer_name, l.program_id, p.name AS program_name,
+            date(l.created_at,'+3 hours') AS lecture_date,
+            v.viewed_at, v.watched_seconds,
+            (SELECT COUNT(*) FROM quizzes q WHERE q.lecture_id = l.id) AS quiz_count,
+            (SELECT COUNT(*) FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id WHERE q.lecture_id = l.id AND a.username = ?) AS attempts,
+            (SELECT MAX(a.score) FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id WHERE q.lecture_id = l.id AND a.username = ?) AS best_score,
+            (SELECT MAX(a.passed) FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id WHERE q.lecture_id = l.id AND a.username = ?) AS passed,
+            (SELECT MIN(a.attempted_at) FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id WHERE q.lecture_id = l.id AND a.username = ?) AS completed_at
+     FROM lectures l
+     LEFT JOIN programs p ON p.id = l.program_id
+     LEFT JOIN lecture_views v ON v.lecture_id = l.id AND v.username = ?
+     WHERE l.status = 'approved' AND strftime('%Y', l.created_at, '+3 hours') = ?
+     ORDER BY l.created_at`
+  )
+    .bind(user.username, user.username, user.username, user.username, user.username, String(year))
+    .all();
+  const lectures = results.map((r) => {
+    const attended = r.quiz_count > 0 ? r.attempts > 0 : !!r.viewed_at;
+    return {
+      id: r.id,
+      title: r.title,
+      lecturer_name: r.lecturer_name,
+      program_name: r.program_name,
+      lecture_date: r.lecture_date,
+      viewed: !!r.viewed_at,
+      attended,
+      attended_at: r.completed_at || (attended ? r.viewed_at : null),
+      watched_minutes: Math.round(((r.watched_seconds || 0) / 60) * 10) / 10,
+      best_score: r.best_score,
+      passed: r.passed == null ? null : !!r.passed,
+    };
+  });
+  const total = lectures.length;
+  const attendedCount = lectures.filter((l) => l.attended).length;
+  const scores = lectures.filter((l) => l.best_score != null).map((l) => l.best_score);
+  return json({
+    ok: true,
+    year,
+    user: { name: user.name, username: user.username, employee_id: user.employee_id, hospital: user.hospital, job_title: user.job_title, email: user.email },
+    summary: {
+      total_lectures: total,
+      attended: attendedCount,
+      attendance_percent: total ? Math.round((attendedCount / total) * 100) : 0,
+      passed: lectures.filter((l) => l.passed).length,
+      average_score: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
+    },
+    lectures,
+  });
+}
+
+/* ---------------- program schedule files ---------------- */
+
+const SCHEDULE_MAX_BYTES = 8 * 1024 * 1024;
+const CHUNK_CHARS = 900000;
+
+async function programFilesMap(env) {
+  const { results } = await env.DB.prepare("SELECT id, program_id, filename, mime, size, access_key, uploaded_at FROM program_files").all();
+  const map = {};
+  for (const f of results) map[f.program_id] = { id: f.id, filename: f.filename, mime: f.mime, size: f.size, key: f.access_key, uploaded_at: f.uploaded_at };
+  return map;
+}
+
+async function programsWithFiles(env) {
+  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
+  let files = {};
+  try { files = await programFilesMap(env); } catch (e) { /* table missing */ }
+  return results.map((p) => ({ ...p, schedule: files[p.id] || null }));
+}
+
+async function deleteProgramFile(env, programId) {
+  const { results } = await env.DB.prepare("SELECT id FROM program_files WHERE program_id = ?").bind(programId).all();
+  for (const f of results) {
+    await env.DB.prepare("DELETE FROM program_file_chunks WHERE file_id = ?").bind(f.id).run();
+    await env.DB.prepare("DELETE FROM program_files WHERE id = ?").bind(f.id).run();
+  }
+}
+
+async function handleScheduleUpload(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { program_id, filename, mime, data } = (await readJson(request)) || {};
+  if (!program_id || !filename || !data) return json({ ok: false, message: "بيانات الملف غير مكتملة." }, 400);
+  if (!/\.(pdf|xlsx|xls|csv)$/i.test(filename)) return json({ ok: false, message: "الصيغ المسموحة: PDF أو Excel." }, 400);
+  const b64 = String(data).replace(/^data:[^,]*,/, "");
+  const size = Math.floor((b64.length * 3) / 4);
+  if (size > SCHEDULE_MAX_BYTES) return json({ ok: false, message: "حجم الملف أكبر من 8 ميجابايت." }, 400);
+  const prog = await env.DB.prepare("SELECT id FROM programs WHERE id = ?").bind(program_id).first();
+  if (!prog) return json({ ok: false, message: "البرنامج غير موجود." }, 404);
+  await deleteProgramFile(env, program_id);
+  const chunks = Math.ceil(b64.length / CHUNK_CHARS);
+  const key = newToken().slice(0, 24);
+  const res = await env.DB.prepare("INSERT INTO program_files (program_id, filename, mime, size, access_key, chunks) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(program_id, String(filename).slice(0, 200), mime || null, size, key, chunks)
+    .run();
+  const fileId = res.meta.last_row_id;
+  for (let i = 0; i < chunks; i++) {
+    await env.DB.prepare("INSERT INTO program_file_chunks (file_id, idx, data) VALUES (?, ?, ?)").bind(fileId, i, b64.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS)).run();
+  }
+  return json({ ok: true, programs: await programsWithFiles(env) });
+}
+
+async function handleScheduleDelete(request, env) {
+  const caller = await getUserFromRequest(request, env);
+  if (!caller || caller.role !== "admin") return json({ ok: false, message: "ممنوع." }, 403);
+  const { program_id } = (await readJson(request)) || {};
+  if (!program_id) return json({ ok: false, message: "المعرف مطلوب." }, 400);
+  await deleteProgramFile(env, program_id);
+  return json({ ok: true, programs: await programsWithFiles(env) });
+}
+
+// Public (key-protected) so PDFs open in the browser and Excel files in the Office viewer.
+async function handleScheduleFile(request, env) {
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  const key = url.searchParams.get("k");
+  const f = await env.DB.prepare("SELECT * FROM program_files WHERE id = ?").bind(id || 0).first();
+  if (!f || f.access_key !== key) return new Response("Not found", { status: 404 });
+  const { results } = await env.DB.prepare("SELECT data FROM program_file_chunks WHERE file_id = ? ORDER BY idx").bind(f.id).all();
+  const bytes = fromB64(results.map((r) => r.data).join(""));
+  const mime = f.mime || (/\.pdf$/i.test(f.filename) ? "application/pdf" : "application/octet-stream");
+  const disposition = url.searchParams.get("download") ? "attachment" : "inline";
+  return new Response(bytes, {
+    headers: {
+      "Content-Type": mime,
+      "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
+      "Cache-Control": "private, max-age=300",
+    },
+  });
+}
+
 /* ---------------- users / programs ---------------- */
 
 async function handleUsersGet(request, env) {
@@ -335,8 +541,7 @@ async function handleLecturersGet(request, env) {
 }
 
 async function handleProgramsGet(env) {
-  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
-  return json({ ok: true, programs: results });
+  return json({ ok: true, programs: await programsWithFiles(env) });
 }
 
 async function handleProgramsPost(request, env) {
@@ -345,8 +550,7 @@ async function handleProgramsPost(request, env) {
   const { name, description } = (await readJson(request)) || {};
   if (!name || !name.trim()) return json({ ok: false, message: "اسم البرنامج مطلوب." }, 400);
   await env.DB.prepare("INSERT INTO programs (name, description) VALUES (?, ?)").bind(name.trim(), description || null).run();
-  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
-  return json({ ok: true, programs: results });
+  return json({ ok: true, programs: await programsWithFiles(env) });
 }
 
 async function handleProgramsUpdate(request, env) {
@@ -355,8 +559,7 @@ async function handleProgramsUpdate(request, env) {
   const { id, name, description } = (await readJson(request)) || {};
   if (!id || !name || !String(name).trim()) return json({ ok: false, message: "اسم البرنامج مطلوب." }, 400);
   await env.DB.prepare("UPDATE programs SET name = ?, description = ? WHERE id = ?").bind(String(name).trim(), description || null, id).run();
-  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
-  return json({ ok: true, programs: results });
+  return json({ ok: true, programs: await programsWithFiles(env) });
 }
 
 async function handleProgramsDelete(request, env) {
@@ -366,9 +569,9 @@ async function handleProgramsDelete(request, env) {
   if (!id) return json({ ok: false, message: "المعرف مطلوب." }, 400);
   const used = await env.DB.prepare("SELECT COUNT(*) AS n FROM lectures WHERE program_id = ?").bind(id).first();
   await env.DB.prepare("UPDATE lectures SET program_id = NULL WHERE program_id = ?").bind(id).run();
+  try { await deleteProgramFile(env, id); } catch (e) { /* ignore */ }
   await env.DB.prepare("DELETE FROM programs WHERE id = ?").bind(id).run();
-  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
-  return json({ ok: true, programs: results, unlinked_lectures: used ? used.n : 0 });
+  return json({ ok: true, programs: await programsWithFiles(env), unlinked_lectures: used ? used.n : 0 });
 }
 
 /* ---------------- email (Resend) ---------------- */
@@ -1153,6 +1356,13 @@ export default {
       "GET /api/users": () => handleUsersGet(request, env),
       "POST /api/users": () => handleUsersPost(request, env),
       "POST /api/users/delete": () => handleUsersDelete(request, env),
+      "POST /api/users/send-reset": () => handleUsersSendReset(request, env),
+      "POST /api/password/forgot": () => handlePasswordForgot(request, env),
+      "POST /api/password/reset": () => handlePasswordReset(request, env),
+      "GET /api/reports/personal": () => handlePersonalReport(request, env),
+      "POST /api/programs/schedule": () => handleScheduleUpload(request, env),
+      "POST /api/programs/schedule/delete": () => handleScheduleDelete(request, env),
+      "GET /api/programs/schedule/file": () => handleScheduleFile(request, env),
       "GET /api/lecturers": () => handleLecturersGet(request, env),
       "GET /api/programs": () => handleProgramsGet(env),
       "POST /api/programs": () => handleProgramsPost(request, env),
