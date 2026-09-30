@@ -1793,15 +1793,43 @@ function openCertificate({ user, lecture, attempt }) {
   }
   const e = escapeHtml;
   const no = certificateNumber(lecture.id, attempt.id);
+  const en = getLang() === "en";
+  const L = en
+    ? {
+        lang: "en", dir: "ltr",
+        platform: "Family & Community Medicine e-Learning Platform",
+        title: "Certificate of Attendance", sub: "شهادة حضور",
+        certifies: "This is to certify that",
+        emp: "Employee ID", facility: "Facility",
+        attended: "has attended the educational lecture entitled",
+        passed: `and passed the post-test with a score of ${e(attempt.score)}%`,
+        issued: "Issue date", number: "Certificate No.",
+        print: "⬇ Save PDF / Print", hint: "Choose “Save as PDF” in the print dialog",
+        pageTitle: "Certificate of Attendance",
+        quoteL: "“", quoteR: "”",
+      }
+    : {
+        lang: "ar", dir: "rtl",
+        platform: PLATFORM_NAME,
+        title: "شهادة حضور", sub: "Certificate of Attendance",
+        certifies: `تشهد ${e(PLATFORM_NAME)} بأن`,
+        emp: "الرقم الوظيفي", facility: "المنشأة",
+        attended: "قد أتمّ/ت حضور المحاضرة التعليمية بعنوان",
+        passed: `واجتاز/ت الاختبار البعدي بنسبة ${e(attempt.score)}%`,
+        issued: "تاريخ الإصدار", number: "رقم الشهادة",
+        print: "⬇ حفظ PDF / طباعة", hint: "اختر «حفظ بتنسيق PDF» (Save as PDF) من نافذة الطباعة",
+        pageTitle: "شهادة حضور",
+        quoteL: "«", quoteR: "»",
+      };
   const details = [
-    user.employee_id ? `الرقم الوظيفي: <b>${e(user.employee_id)}</b>` : "",
-    user.hospital ? `المنشأة: <b>${e(user.hospital)}</b>` : "",
+    user.employee_id ? `${L.emp}: <b>${e(user.employee_id)}</b>` : "",
+    user.hospital ? `${L.facility}: <b><bdi>${e(user.hospital)}</bdi></b>` : "",
   ].filter(Boolean).join(" &nbsp;•&nbsp; ");
   w.document.open();
   w.document.write(`<!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<html lang="${L.lang}" dir="${L.dir}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>شهادة حضور - ${e(user.name)} - ${e(no)}</title>
+<title>${L.pageTitle} - ${e(user.name)} - ${e(no)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -1835,25 +1863,26 @@ function openCertificate({ user, lecture, attempt }) {
     .toolbar { display: none; }
     .page { margin: 0; box-shadow: none; transform: none !important; }
   }
+  ${en ? ".en { letter-spacing: 0; text-transform: none; font-size: 18px; } h1 { letter-spacing: 0.5px; }" : ""}
 </style></head>
 <body>
   <div class="toolbar">
-    <button onclick="window.print()">⬇ حفظ PDF / طباعة</button>
-    <span class="hint">اختر «حفظ بتنسيق PDF» (Save as PDF) من نافذة الطباعة</span>
+    <button onclick="window.print()">${L.print}</button>
+    <span class="hint">${L.hint}</span>
   </div>
   <div class="page"><div class="frame">
-    <div class="head"><img src="${PROGRAM_LOGO}" alt=""><div class="platform">${e(PLATFORM_NAME)}</div></div>
-    <h1>شهادة حضور</h1>
-    <div class="en">Certificate of Attendance</div>
-    <div class="line">تشهد ${e(PLATFORM_NAME)} بأن</div>
-    <div class="name">${e(user.name)}</div>
+    <div class="head"><img src="${PROGRAM_LOGO}" alt=""><div class="platform">${e(L.platform)}</div></div>
+    <h1>${L.title}</h1>
+    <div class="en">${L.sub}</div>
+    <div class="line">${L.certifies}</div>
+    <div class="name"><bdi>${e(user.name)}</bdi></div>
     ${details ? `<div class="details">${details}</div>` : ""}
-    <div class="line">قد أتمّ/ت حضور المحاضرة التعليمية بعنوان</div>
-    <div class="title">«${e(lecture.title)}»</div>
-    <div class="line" style="margin-top:3mm"><span class="score">واجتاز/ت الاختبار البعدي بنسبة ${e(attempt.score)}%</span></div>
+    <div class="line">${L.attended}</div>
+    <div class="title">${L.quoteL}<bdi>${e(lecture.title)}</bdi>${L.quoteR}</div>
+    <div class="line" style="margin-top:3mm"><span class="score">${L.passed}</span></div>
     <div class="foot">
-      <div class="box">تاريخ الإصدار<br><b>${e(fmtDate(attempt.attempted_at))}</b></div>
-      <div class="box">رقم الشهادة<br><span class="no">${e(no)}</span></div>
+      <div class="box">${L.issued}<br><b>${e(fmtDate(attempt.attempted_at))}</b></div>
+      <div class="box">${L.number}<br><span class="no">${e(no)}</span></div>
     </div>
   </div></div>
   <script>
