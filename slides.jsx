@@ -339,12 +339,12 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
       const text = slides[i]?.narration || defaultNarration(slides[i] || {});
       const key = `${voice}|${text}`;
       if (cacheRef.current[key]) return cacheRef.current[key];
-      const blob = await api.tts(text, voice);
+      const blob = await api.tts(text, voice, { lectureId, slideIndex: i });
       const url = URL.createObjectURL(blob);
       cacheRef.current[key] = url;
       return url;
     },
-    [slides, voice],
+    [slides, voice, lectureId],
   );
 
   const handleSlideEnded = useCallback(() => {
