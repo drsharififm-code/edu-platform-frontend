@@ -1427,3 +1427,44 @@ textarea {
     padding-top: 60px;
   }
 }
+
+/* ---------- v2.0 security UI ---------- */
+.turnstile-wrap { display: flex; justify-content: center; min-height: 65px; margin: 4px 0; }
+.pw-rules { list-style: none; margin: -2px 0 6px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 12px; }
+.pw-rules li { color: #94a3b8; }
+.pw-rules li.ok { color: #15803d; font-weight: 600; }
+.pw-rules li span { display: inline-block; width: 14px; }
+.pw-fieldset { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px 6px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.pw-fieldset legend { font-weight: 700; color: #0f766e; padding: 0 6px; }
+.pw-fieldset .pw-rules, .pw-fieldset .hint { grid-column: 1 / -1; }
+.mfa-box { display: grid; gap: 12px; }
+.mfa-title { margin: 0; font-size: 20px; color: #0f766e; text-align: center; }
+.mfa-steps { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; font-size: 14px; }
+.mfa-qr { width: 220px; height: 220px; margin: 0 auto; display: block; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; image-rendering: pixelated; }
+.mfa-manual { font-size: 13px; background: #f8fafc; border-radius: 8px; padding: 8px 12px; }
+.mfa-manual summary { cursor: pointer; color: #0f766e; font-weight: 600; }
+.mfa-secret { display: block; font-size: 15px; letter-spacing: 1px; background: #fff; border: 1px dashed #94a3b8; border-radius: 6px; padding: 8px; word-break: break-all; text-align: center; }
+.otp-input { font-size: 26px !important; letter-spacing: 8px; text-align: center; font-family: "Courier New", monospace; }
+.recovery-codes { list-style: none; margin: 0; padding: 12px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 8px; font-family: "Courier New", monospace; font-size: 15px; text-align: center; }
+.mfa-status { margin: 0 0 12px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.certificate-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.error-text { color: #b91c1c; font-size: 13px; }
+.verify-card { max-width: 560px; }
+.verify-result { margin-top: 14px; border-radius: 12px; padding: 14px 16px; border: 2px solid #e2e8f0; }
+.verify-result.valid { border-color: #16a34a; background: #f0fdf4; }
+.verify-result.expired { border-color: #d97706; background: #fffbeb; }
+.verify-result.revoked { border-color: #dc2626; background: #fef2f2; }
+.verify-result dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 14px; }
+.verify-result dt { color: #64748b; }
+.verify-result dd { margin: 0; font-weight: 600; }
+.cert-badge { display: inline-block; border-radius: 999px; padding: 3px 12px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.cert-badge.valid { background: #dcfce7; color: #15803d; }
+.cert-badge.expired { background: #fef3c7; color: #b45309; }
+.cert-badge.revoked { background: #fee2e2; color: #b91c1c; }
+.cert-counts { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 10px; font-size: 14px; }
+.actions-cell { white-space: nowrap; }
+.actions-cell .btn { margin-inline-end: 4px; }
+.audit-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+tr.risky td { background: #fff1f2; }
+.muted.small { font-size: 12px; }
+.nowrap { white-space: nowrap; }

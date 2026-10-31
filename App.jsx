@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken, API_BASE } from "./api.js";
 import { getLang, setLang, dateLocale } from "./i18n.js";
 import { SlidePlayer, parsePptx, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
+import { tr, Turnstile, turnstileEnabled, PasswordRules, passwordOk, MfaStep, CertificateCard, VerifyPage, CertificatesPortal, AuditLog, safeHref } from "./secure.jsx";
 
 const PROGRAM_LOGO =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIQAAAB6CAMAAABJAgv8AAABIFBMVEX+/v6YpKbO6NS3xsfN19bl6uuttrjY5uVRpmsXOjijqq2q17bEycwwdk1PmGoXZTfa9eYnR0ZyuYeWx6YtaEczVlPQ89c5mldFmVlRh2ZLaGduh4h2lo+X1aqoyLO418mHxphzp4aIt5iVt6top3pWdXO1vcFmmXmEmpm45cUaQ0J2xI5YsnOIqJWt4boZXTQjWzckZDyXnqMaQT1Fd1bW3eE3oVpGhFxFpFxotHwiOzs4gllDWVlje3sdaEAiQD04mmNjhnlEZVzj+t06ZWM5omSN0ZcVP0Q8hGBesYAbVlJJX2JmeoC58scAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADfPnBAAAAYHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8AAAAAAAAAAAAAAAAAAAAAAAAEoWZuAAAJGUlEQVR42u1aaXfiuBLFli1veLfBNph9h7CEkKWT7vQ+M+/N/P+/82QCRpZEeizmnfc+UCd9EgyRrqpu3SpVulK52tWudrWrXe1qV7va1a52tav935gjGi1DvGSF2rLjPXleWuNdQOw+2/bKtu+63DjSRT1SkdUjj2+NfrAymz2/NzBXwQ3fKbzPqj91Kk7N8CLV4IjEYHXnH35u3a0GDkcoPKuTv1iqUav0Cl3bOjlQUe3m/rvRG1txHFvNvnTm8KIkSeLbb3o/UhzSwirrC38dF16PNz2xY5m2bZuZZd+7bWJ/Y75Q7+vI7u9Vb278rHeK76tqOXrW7r4WieTcBeZ6E/da+8ei1Oo+rFbx6Wiiv/hx/0P1Op3USP2Op1pRtCD2TCO/pCN6JE1te1zE1R5vjo+mXlRX53gyO6kapSTN1EEpEFZAZpT4bJO4Km3LNtHhlp5leWS8l48qlZQdtUyeymZM47IZeeqbm8H8s9WhFzfuF/Sz+rRMgptjOl1WLLEQ45XJ1CE2CONSEHb/jJ6MWc+n0aUgFPML9Wxgn1lhYLNQ1B5VSt9a9WUZYj7ckSs4z8/nsnwc9BhPvYgigFdOKAZr8tjG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";
@@ -205,10 +206,10 @@ function ScheduleViewer({ program, onClose }) {
       <div className="schedule-viewer-head">
         <strong>📅 جدول محاضرات برنامج «{program.name}»</strong>
         <div className="schedule-viewer-actions">
-          <a className="btn btn-small" href={scheduleFileUrl(sch, true)} target="_blank" rel="noreferrer">
+          <a className="btn btn-small" href={scheduleFileUrl(sch, true)} target="_blank" rel="noopener noreferrer">
             ⬇ تحميل
           </a>
-          <a className="btn btn-small" href={isPdf ? url : src} target="_blank" rel="noreferrer">
+          <a className="btn btn-small" href={isPdf ? url : src} target="_blank" rel="noopener noreferrer">
             ↗ نافذة جديدة
           </a>
           {onClose && (
@@ -440,7 +441,7 @@ function ResetPasswordPage({ token, onDone }) {
   async function submit(e) {
     e.preventDefault();
     setError("");
-    if (password.length < 6) return setError("كلمة المرور يجب ألا تقل عن 6 أحرف.");
+    if (!passwordOk(password)) return setError(tr("كلمة المرور لا تستوفي شروط الأمان الموضحة أدناه.", "The password does not meet the security rules shown below."));
     if (password !== confirm) return setError("كلمتا المرور غير متطابقتين.");
     setLoading(true);
     try {
@@ -469,12 +470,13 @@ function ResetPasswordPage({ token, onDone }) {
           <form className="form" onSubmit={submit}>
             <label>
               كلمة المرور الجديدة
-              <PasswordInput required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <PasswordInput required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </label>
             <label>
               تأكيد كلمة المرور
-              <PasswordInput required minLength={6} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              <PasswordInput required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </label>
+            <PasswordRules password={password} confirm={confirm} />
             <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? <Spinner /> : "حفظ كلمة المرور"}
             </button>
@@ -540,16 +542,27 @@ function isLectureExpired(lecture) {
 
 /* ---------------- Auth ---------------- */
 
-function AuthPage({ onLoggedIn }) {
-  const [mode, setMode] = useState("login"); // login | signup
+function AuthPage({ onLoggedIn, onVerify }) {
+  const [mode, setMode] = useState("login"); // login | signup | forgot
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [challenge, setChallenge] = useState(null); // two-factor step
+  const [captcha, setCaptcha] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const resetCaptcha = () => setCaptchaReset((n) => n + 1);
+  const captchaMissing = () => {
+    if (turnstileEnabled && !captcha) {
+      setError(tr("الرجاء إكمال التحقق البشري (أنا لست روبوتاً).", "Please complete the human verification check."));
+      return true;
+    }
+    return false;
+  };
 
   const [loginForm, setLoginForm] = useState({
     username: "",
     password: "",
-    keepSignedIn: true,
+    keepSignedIn: false,
   });
   const [signupForm, setSignupForm] = useState({
     first_name: "",
@@ -563,19 +576,28 @@ function AuthPage({ onLoggedIn }) {
     job_title: "",
   });
 
+  function switchMode(m) {
+    setMode(m);
+    setError("");
+    setSuccess("");
+    setCaptcha("");
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    if (captchaMissing()) return;
     setLoading(true);
     try {
-      const data = await api.login(loginForm);
-      setToken(data.token);
-      onLoggedIn(data.user);
+      const data = await api.login({ ...loginForm, cf_turnstile: captcha });
+      setChallenge({ ...data, keep: loginForm.keepSignedIn });
+      setLoginForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      resetCaptcha();
     }
   }
 
@@ -584,14 +606,16 @@ function AuthPage({ onLoggedIn }) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    if (captchaMissing()) return;
     setLoading(true);
     try {
-      const res = await api.forgotPassword(forgotId.trim());
+      const res = await api.forgotPassword(forgotId.trim(), captcha);
       setSuccess(res.message);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      resetCaptcha();
     }
   }
 
@@ -605,22 +629,53 @@ function AuthPage({ onLoggedIn }) {
       setError("الرجاء إدخال الاسم الأول واسم العائلة على الأقل.");
       return;
     }
+    if (!/^[A-Za-z0-9._-]{3,32}$/.test(signupForm.username.trim())) {
+      setError(tr("اسم المستخدم يجب أن يكون من 3 إلى 32 حرفاً إنجليزياً أو رقماً (يسمح بـ . _ -).", "The username must be 3–32 English letters or digits (. _ - allowed)."));
+      return;
+    }
+    if (!passwordOk(signupForm.password, signupForm.username)) {
+      setError(tr("كلمة المرور لا تستوفي شروط الأمان الموضحة أسفل الحقل.", "The password does not meet the security rules shown below the field."));
+      return;
+    }
+    if (captchaMissing()) return;
     setLoading(true);
     try {
       const data = await api.signup({
         ...signupForm,
+        username: signupForm.username.trim(),
         first_name: fn,
         last_name: ln,
-        name: `${fn} ${ln}`,
+        cf_turnstile: captcha,
       });
       setSuccess(data.message);
       setMode("login");
-      setLoginForm((f) => ({ ...f, username: signupForm.username }));
+      setLoginForm((f) => ({ ...f, username: signupForm.username.trim() }));
+      setSignupForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      resetCaptcha();
     }
+  }
+
+  if (challenge) {
+    return (
+      <div className="auth-shell">
+        <LangToggle className="lang-toggle-fixed" />
+        <div className="auth-card">
+          <MfaStep
+            challenge={challenge}
+            onCancel={() => setChallenge(null)}
+            onDone={(data) => {
+              setToken(data.token, challenge.keep);
+              onLoggedIn(data.user);
+            }}
+          />
+          <CopyrightMark className="auth-copyright" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -630,24 +685,10 @@ function AuthPage({ onLoggedIn }) {
         <div className="auth-logo">🎓</div>
         <h1 className="auth-title">{PLATFORM_NAME}</h1>
         <div className="auth-tabs">
-          <button
-            className={mode === "login" ? "tab active" : "tab"}
-            onClick={() => {
-              setMode("login");
-              setError("");
-              setSuccess("");
-            }}
-          >
+          <button className={mode === "login" ? "tab active" : "tab"} onClick={() => switchMode("login")}>
             تسجيل الدخول
           </button>
-          <button
-            className={mode === "signup" ? "tab active" : "tab"}
-            onClick={() => {
-              setMode("signup");
-              setError("");
-              setSuccess("");
-            }}
-          >
+          <button className={mode === "signup" ? "tab active" : "tab"} onClick={() => switchMode("signup")}>
             حساب جديد
           </button>
         </div>
@@ -662,12 +703,11 @@ function AuthPage({ onLoggedIn }) {
               <input
                 required
                 dir="ltr"
+                maxLength={64}
                 autoComplete="username"
                 autoCapitalize="none"
                 value={loginForm.username}
-                onChange={(e) =>
-                  setLoginForm({ ...loginForm, username: e.target.value })
-                }
+                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
               />
             </label>
             <label>
@@ -676,38 +716,26 @@ function AuthPage({ onLoggedIn }) {
                 required
                 autoComplete="current-password"
                 value={loginForm.password}
-                onChange={(e) =>
-                  setLoginForm({ ...loginForm, password: e.target.value })
-                }
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               />
             </label>
             <label className="checkbox-row">
               <input
                 type="checkbox"
                 checked={loginForm.keepSignedIn}
-                onChange={(e) =>
-                  setLoginForm({ ...loginForm, keepSignedIn: e.target.checked })
-                }
+                onChange={(e) => setLoginForm({ ...loginForm, keepSignedIn: e.target.checked })}
               />
-              إبقائي مسجّل الدخول
+              {tr("إبقائي مسجّل الدخول (7 أيام — على جهازي الشخصي فقط)", "Keep me signed in (7 days — on my personal device only)")}
             </label>
-            <button
-              className="btn btn-primary"
-              disabled={loading}
-              type="submit"
-            >
+            {mode === "login" && <Turnstile key="t-login" onToken={setCaptcha} resetKey={captchaReset} />}
+            <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? <Spinner /> : "دخول"}
             </button>
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                setMode("forgot");
-                setError("");
-                setSuccess("");
-              }}
-            >
+            <button type="button" className="link-btn" onClick={() => switchMode("forgot")}>
               نسيت كلمة المرور؟
+            </button>
+            <button type="button" className="link-btn" onClick={onVerify}>
+              🔎 {tr("التحقق من شهادة حضور", "Verify an attendance certificate")}
             </button>
           </form>
         ) : mode === "forgot" ? (
@@ -717,18 +745,13 @@ function AuthPage({ onLoggedIn }) {
             </p>
             <label>
               اسم المستخدم أو البريد الإلكتروني
-              <input
-                required
-                dir="ltr"
-                autoCapitalize="none"
-                value={forgotId}
-                onChange={(e) => setForgotId(e.target.value)}
-              />
+              <input required dir="ltr" maxLength={254} autoCapitalize="none" value={forgotId} onChange={(e) => setForgotId(e.target.value)} />
             </label>
+            <Turnstile key="t-forgot" onToken={setCaptcha} resetKey={captchaReset} />
             <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? <Spinner /> : "إرسال رابط إعادة التعيين"}
             </button>
-            <button type="button" className="link-btn" onClick={() => setMode("login")}>
+            <button type="button" className="link-btn" onClick={() => switchMode("login")}>
               ← العودة لتسجيل الدخول
             </button>
           </form>
@@ -737,113 +760,61 @@ function AuthPage({ onLoggedIn }) {
             <div className="form-row-2">
               <label>
                 الاسم الأول *
-                <input
-                  required
-                  autoComplete="given-name"
-                  value={signupForm.first_name}
-                  onChange={(e) =>
-                    setSignupForm({ ...signupForm, first_name: e.target.value })
-                  }
-                />
+                <input required maxLength={60} autoComplete="given-name" value={signupForm.first_name} onChange={(e) => setSignupForm({ ...signupForm, first_name: e.target.value })} />
               </label>
               <label>
                 اسم العائلة *
-                <input
-                  required
-                  autoComplete="family-name"
-                  value={signupForm.last_name}
-                  onChange={(e) =>
-                    setSignupForm({ ...signupForm, last_name: e.target.value })
-                  }
-                />
+                <input required maxLength={60} autoComplete="family-name" value={signupForm.last_name} onChange={(e) => setSignupForm({ ...signupForm, last_name: e.target.value })} />
               </label>
             </div>
             <label>
               الرقم الوظيفي *
-              <input
-                required
-                inputMode="numeric"
-                value={signupForm.employee_id}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, employee_id: e.target.value })
-                }
-              />
+              <input required maxLength={30} inputMode="numeric" value={signupForm.employee_id} onChange={(e) => setSignupForm({ ...signupForm, employee_id: e.target.value })} />
             </label>
             <label>
               البريد الإلكتروني *
-              <input
-                required
-                type="email"
-                dir="ltr"
-                autoComplete="email"
-                placeholder="name@example.com"
-                value={signupForm.email}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, email: e.target.value })
-                }
-              />
+              <input required type="email" dir="ltr" maxLength={254} autoComplete="email" placeholder="name@example.com" value={signupForm.email} onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })} />
             </label>
             <label>
               اسم المستشفى / المنشأة *
-              <input
-                required
-                value={signupForm.hospital}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, hospital: e.target.value })
-                }
-              />
+              <input required maxLength={150} value={signupForm.hospital} onChange={(e) => setSignupForm({ ...signupForm, hospital: e.target.value })} />
             </label>
             <label>
               اسم المستخدم *
               <input
                 required
                 dir="ltr"
+                maxLength={32}
+                pattern="[A-Za-z0-9._\-]{3,32}"
                 autoComplete="username"
                 autoCapitalize="none"
                 value={signupForm.username}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, username: e.target.value })
-                }
+                onChange={(e) => setSignupForm({ ...signupForm, username: e.target.value })}
               />
             </label>
             <label>
               كلمة المرور *
-              <PasswordInput
-                required
-                autoComplete="new-password"
-                value={signupForm.password}
-                onChange={(e) =>
-                  setSignupForm({ ...signupForm, password: e.target.value })
-                }
-              />
+              <PasswordInput required autoComplete="new-password" value={signupForm.password} onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })} />
             </label>
+            <PasswordRules password={signupForm.password} username={signupForm.username} />
             <div className="form-row-2">
               <label>
                 التخصص
-                <input
-                  value={signupForm.specialty}
-                  onChange={(e) =>
-                    setSignupForm({ ...signupForm, specialty: e.target.value })
-                  }
-                />
+                <input maxLength={120} value={signupForm.specialty} onChange={(e) => setSignupForm({ ...signupForm, specialty: e.target.value })} />
               </label>
               <label>
                 المسمى الوظيفي
-                <SelectOrOther
-                  options={JOB_TITLES}
-                  value={signupForm.job_title}
-                  onChange={(v) => setSignupForm({ ...signupForm, job_title: v })}
-                />
+                <SelectOrOther options={JOB_TITLES} value={signupForm.job_title} onChange={(v) => setSignupForm({ ...signupForm, job_title: v })} />
               </label>
             </div>
             <p className="hint">
               سيتم إنشاء حسابك كمتدرب، وينتظر موافقة المشرف قبل تفعيله.
             </p>
-            <button
-              className="btn btn-primary"
-              disabled={loading}
-              type="submit"
-            >
+            <p className="hint">
+              {tr("عند أول دخول سيُطلب منك ربط تطبيق مصادقة على هاتفك (Google أو Microsoft Authenticator).", "At first sign-in you will be asked to link an authenticator app on your phone (Google or Microsoft Authenticator).")}
+            </p>
+            <Turnstile key="t-signup" onToken={setCaptcha} resetKey={captchaReset} />
+            <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? <Spinner /> : "إنشاء الحساب"}
             </button>
           </form>
@@ -859,7 +830,8 @@ function AuthPage({ onLoggedIn }) {
 function ProfilePage({ user, onUpdated, mustComplete = false }) {
   const [form, setForm] = useState({
     name: user.name || "",
-    password: "",
+    current_password: "",
+    new_password: "",
     employee_id: user.employee_id || "",
     email: user.email || "",
     hospital: user.hospital || "",
@@ -870,24 +842,35 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const mustChange = !!user.must_change_password;
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true);
     setError("");
     setSuccess("");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setLoading(false);
       setError("البريد الإلكتروني مطلوب — الرجاء إدخال بريد صحيح.");
       return;
     }
+    if (mustChange && !form.new_password) {
+      setError(tr("يجب تغيير كلمة المرور للمتابعة.", "You must change your password to continue."));
+      return;
+    }
+    if (form.new_password) {
+      if (!form.current_password) return setError(tr("أدخل كلمة المرور الحالية لتغيير كلمة المرور.", "Enter your current password to change the password."));
+      if (!passwordOk(form.new_password, user.username)) return setError(tr("كلمة المرور الجديدة لا تستوفي شروط الأمان الموضحة.", "The new password does not meet the security rules shown."));
+    }
+    setLoading(true);
     try {
       const payload = { ...form };
-      if (!payload.password) delete payload.password;
+      if (!payload.new_password) {
+        delete payload.new_password;
+        delete payload.current_password;
+      }
       const data = await api.updateProfile(payload);
       onUpdated(data.user);
-      setSuccess("تم حفظ التعديلات بنجاح.");
-      setForm((f) => ({ ...f, password: "" }));
+      setSuccess(data.message || "تم حفظ التعديلات بنجاح.");
+      setForm((f) => ({ ...f, current_password: "", new_password: "" }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -898,78 +881,65 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
   return (
     <div className="panel">
       <h2>الملف الشخصي</h2>
+      {mustChange && (
+        <div className="notice-box">
+          🔒 {tr("كلمة المرور الحالية لا تستوفي شروط الأمان الجديدة. الرجاء تعيين كلمة مرور جديدة للمتابعة.", "Your current password does not meet the new security rules. Please set a new password to continue.")}
+        </div>
+      )}
       {mustComplete && (
         <div className="notice-box">
           📧 الرجاء إضافة بريدك الإلكتروني لإكمال بيانات حسابك. سيُستخدم لإرسال
           إشعارات المنصة (مثل اعتماد الحساب) وشهادات الحضور.
         </div>
       )}
+      <div className="mfa-status">
+        🔐 {tr("التحقق الثنائي", "Two-factor authentication")}:{" "}
+        {user.mfa_enabled ? <Badge tone="success">{tr("مفعّل (site.sa)", "On (site.sa)")}</Badge> : <Badge tone="warning">{tr("غير مفعّل", "Off")}</Badge>}
+      </div>
       <ErrorBox message={error} />
       <SuccessBox message={success} />
       <form className="form form-grid" onSubmit={handleSubmit}>
         <label>
           الاسم الكامل
-          <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </label>
-        <label>
-          كلمة مرور جديدة (اختياري)
-          <PasswordInput
-            autoComplete="new-password"
-            placeholder="اتركه فارغاً لعدم التغيير"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+          <input maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </label>
         <label>
           الرقم الوظيفي
-          <input
-            inputMode="numeric"
-            value={form.employee_id}
-            onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
-          />
+          <input maxLength={30} inputMode="numeric" value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} />
         </label>
         <label>
           البريد الإلكتروني *
-          <input
-            type="email"
-            dir="ltr"
-            required
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
+          <input type="email" dir="ltr" required maxLength={254} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
         <label>
           اسم المستشفى / المنشأة
-          <input
-            value={form.hospital}
-            onChange={(e) => setForm({ ...form, hospital: e.target.value })}
-          />
+          <input maxLength={150} value={form.hospital} onChange={(e) => setForm({ ...form, hospital: e.target.value })} />
         </label>
         <label>
           القسم / الجهة
-          <input
-            value={form.department}
-            onChange={(e) => setForm({ ...form, department: e.target.value })}
-          />
+          <input maxLength={120} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
         </label>
         <label>
           التخصص
-          <input
-            value={form.specialty}
-            onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-          />
+          <input maxLength={120} value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })} />
         </label>
         <label>
           المسمى الوظيفي
-          <SelectOrOther
-            options={JOB_TITLES}
-            value={form.job_title}
-            onChange={(v) => setForm({ ...form, job_title: v })}
-          />
+          <SelectOrOther options={JOB_TITLES} value={form.job_title} onChange={(v) => setForm({ ...form, job_title: v })} />
         </label>
+        <fieldset className="pw-fieldset">
+          <legend>{tr("تغيير كلمة المرور", "Change password")}{mustChange ? " *" : ` (${tr("اختياري", "optional")})`}</legend>
+          <label>
+            {tr("كلمة المرور الحالية", "Current password")}
+            <PasswordInput autoComplete="current-password" value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} />
+          </label>
+          <label>
+            {tr("كلمة المرور الجديدة", "New password")}
+            <PasswordInput autoComplete="new-password" placeholder={mustChange ? "" : "اتركه فارغاً لعدم التغيير"} value={form.new_password} onChange={(e) => setForm({ ...form, new_password: e.target.value })} />
+          </label>
+          {(form.new_password || mustChange) && <PasswordRules password={form.new_password} username={user.username} />}
+          <p className="hint">{tr("عند تغيير كلمة المرور سيتم تسجيل خروجك من الأجهزة الأخرى.", "Changing the password signs you out of other devices.")}</p>
+        </fieldset>
         <div className="form-actions">
           <button className="btn btn-primary" disabled={loading} type="submit">
             {loading ? <Spinner /> : "حفظ"}
@@ -1773,127 +1743,6 @@ function QuizForm({ lectureId, onSaved, onCancel }) {
 
 /* ---------------- Quiz taking (trainee) ---------------- */
 
-/* ---------------- Attendance certificate (PDF via print) ---------------- */
-
-function escapeHtml(v) {
-  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-}
-
-function certificateNumber(lectureId, attemptId) {
-  return `FCM-${String(lectureId).padStart(4, "0")}-${String(attemptId).padStart(5, "0")}`;
-}
-
-function openCertificate({ user, lecture, attempt }) {
-  const w = window.open("", "_blank");
-  if (!w) {
-    window.alert("الرجاء السماح بالنوافذ المنبثقة لهذا الموقع لتحميل الشهادة.");
-    return;
-  }
-  const e = escapeHtml;
-  const no = certificateNumber(lecture.id, attempt.id);
-  const en = getLang() === "en";
-  const L = en
-    ? {
-        lang: "en", dir: "ltr",
-        platform: "Family & Community Medicine e-Learning Platform",
-        title: "Certificate of Attendance", sub: "شهادة حضور",
-        certifies: "This is to certify that",
-        emp: "Employee ID", facility: "Facility",
-        attended: "has attended the educational lecture entitled",
-        passed: `and passed the post-test with a score of ${e(attempt.score)}%`,
-        issued: "Issue date", number: "Certificate No.",
-        print: "⬇ Save PDF / Print", hint: "Choose “Save as PDF” in the print dialog",
-        pageTitle: "Certificate of Attendance",
-        quoteL: "“", quoteR: "”",
-      }
-    : {
-        lang: "ar", dir: "rtl",
-        platform: PLATFORM_NAME,
-        title: "شهادة حضور", sub: "Certificate of Attendance",
-        certifies: `تشهد ${e(PLATFORM_NAME)} بأن`,
-        emp: "الرقم الوظيفي", facility: "المنشأة",
-        attended: "قد أتمّ/ت حضور المحاضرة التعليمية بعنوان",
-        passed: `واجتاز/ت الاختبار البعدي بنسبة ${e(attempt.score)}%`,
-        issued: "تاريخ الإصدار", number: "رقم الشهادة",
-        print: "⬇ حفظ PDF / طباعة", hint: "اختر «حفظ بتنسيق PDF» (Save as PDF) من نافذة الطباعة",
-        pageTitle: "شهادة حضور",
-        quoteL: "«", quoteR: "»",
-      };
-  const details = [
-    user.employee_id ? `${L.emp}: <b>${e(user.employee_id)}</b>` : "",
-    user.hospital ? `${L.facility}: <b><bdi>${e(user.hospital)}</bdi></b>` : "",
-  ].filter(Boolean).join(" &nbsp;•&nbsp; ");
-  w.document.open();
-  w.document.write(`<!doctype html>
-<html lang="${L.lang}" dir="${L.dir}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${L.pageTitle} - ${e(user.name)} - ${e(no)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-<style>
-  @page { size: A4 landscape; margin: 0; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: #e5ecea; font-family: "Tajawal", "Segoe UI", Tahoma, sans-serif; color: #1f2937; }
-  .toolbar { display: flex; gap: 8px; justify-content: center; padding: 12px; }
-  .toolbar button { font: inherit; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: 0; background: #0f766e; color: #fff; cursor: pointer; }
-  .toolbar .hint { align-self: center; color: #475569; font-size: 14px; }
-  .page { width: 297mm; height: 210mm; margin: 0 auto 16px; background: #fff; padding: 12mm; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
-  .frame { height: 100%; border: 3px solid #0f766e; outline: 1px solid #99c9c2; outline-offset: -9px; border-radius: 6px; padding: 12mm 18mm; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
-  .head { display: flex; align-items: center; gap: 14px; }
-  .head img { width: 64px; height: 60px; object-fit: contain; }
-  .platform { font-weight: 700; color: #115e59; font-size: 18px; }
-  h1 { margin: 10mm 0 2mm; font-size: 40px; font-weight: 800; color: #0f766e; letter-spacing: 1px; }
-  .en { font-size: 16px; color: #64748b; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 7mm; }
-  .line { font-size: 19px; margin: 1.5mm 0; }
-  .name { font-size: 34px; font-weight: 800; color: #111827; margin: 3mm 0 2mm; border-bottom: 2px solid #f59e0b; padding: 0 10mm 2mm; }
-  .details { font-size: 16px; color: #475569; margin-bottom: 4mm; }
-  .title { font-size: 24px; font-weight: 700; color: #115e59; margin: 2mm 0 3mm; }
-  .score { display: inline-block; background: #f0fdfa; border: 1px solid #99c9c2; border-radius: 999px; padding: 1.5mm 6mm; font-weight: 700; color: #0f766e; }
-  .foot { margin-top: auto; width: 100%; display: flex; justify-content: space-between; align-items: flex-end; font-size: 14px; color: #475569; }
-  .foot .box { text-align: center; min-width: 60mm; }
-  .foot .sig { border-top: 1px solid #94a3b8; margin-top: 12mm; padding-top: 2mm; }
-  .no { font-family: monospace; direction: ltr; font-size: 14px; color: #334155; }
-  @media screen and (max-width: 1100px) {
-    .page { transform-origin: top center; transform: scale(calc(100vw / 1180)); margin-bottom: calc((100vw / 1180 - 1) * 210mm); }
-  }
-  @media print {
-    html, body { background: #fff; }
-    .toolbar { display: none; }
-    .page { margin: 0; box-shadow: none; transform: none !important; }
-  }
-  ${en ? ".en { letter-spacing: 0; text-transform: none; font-size: 18px; } h1 { letter-spacing: 0.5px; }" : ""}
-</style></head>
-<body>
-  <div class="toolbar">
-    <button onclick="window.print()">${L.print}</button>
-    <span class="hint">${L.hint}</span>
-  </div>
-  <div class="page"><div class="frame">
-    <div class="head"><img src="${PROGRAM_LOGO}" alt=""><div class="platform">${e(L.platform)}</div></div>
-    <h1>${L.title}</h1>
-    <div class="en">${L.sub}</div>
-    <div class="line">${L.certifies}</div>
-    <div class="name"><bdi>${e(user.name)}</bdi></div>
-    ${details ? `<div class="details">${details}</div>` : ""}
-    <div class="line">${L.attended}</div>
-    <div class="title">${L.quoteL}<bdi>${e(lecture.title)}</bdi>${L.quoteR}</div>
-    <div class="line" style="margin-top:3mm"><span class="score">${L.passed}</span></div>
-    <div class="foot">
-      <div class="box">${L.issued}<br><b>${e(fmtDate(attempt.attempted_at))}</b></div>
-      <div class="box">${L.number}<br><span class="no">${e(no)}</span></div>
-    </div>
-  </div></div>
-  <script>
-    (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () {
-      setTimeout(function () { window.print(); }, 350);
-    });
-  </script>
-</body></html>`);
-  w.document.close();
-}
-
 /* ---------------- Post-test attempts: one original + one retake ---------------- */
 
 const MAX_QUIZ_ATTEMPTS = 2;
@@ -2586,9 +2435,9 @@ function LectureDetail({ lecture, user, onBack }) {
           {externalVideo && (
             <div className="content-actions">
               <a
-                href={lecture.video_url}
+                href={safeHref(lecture.video_url) || undefined}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="btn btn-small"
                 onClick={() => setOpened((o) => ({ ...o, video: true }))}
               >
@@ -2613,9 +2462,9 @@ function LectureDetail({ lecture, user, onBack }) {
           )}
           <div className="content-actions">
             <a
-              href={lecture.slides_url}
+              href={safeHref(lecture.slides_url) || undefined}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="btn btn-small"
               onClick={() => setOpened((o) => ({ ...o, ppt: true }))}
             >
@@ -2645,7 +2494,7 @@ function LectureDetail({ lecture, user, onBack }) {
         <ul className="extra-links">
           {lecture.extra_links.map((l, i) => (
             <li key={i}>
-              <a href={l.url} target="_blank" rel="noreferrer">
+              <a href={safeHref(l.url) || undefined} target="_blank" rel="noopener noreferrer">
                 🔗 {l.label || l.url}
               </a>
             </li>
@@ -2697,22 +2546,7 @@ function LectureDetail({ lecture, user, onBack }) {
       )}
 
       {!loading && isTrainee && passedAttempt && (
-        <div className="certificate-card">
-          <span className="certificate-icon" aria-hidden="true">🎓</span>
-          <div className="certificate-text">
-            <strong>شهادة الحضور</strong>
-            <span>
-              اجتزت الاختبار البعدي بنسبة {passedAttempt.score}% — رقم الشهادة{" "}
-              <bdi dir="ltr">{certificateNumber(lecture.id, passedAttempt.id)}</bdi>
-            </span>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={() => openCertificate({ user, lecture, attempt: passedAttempt })}
-          >
-            ⬇ تحميل الشهادة PDF
-          </button>
-        </div>
+        <CertificateCard lectureId={lecture.id} refreshKey={myAttempts.length} logo={PROGRAM_LOGO} />
       )}
       {!loading && isTrainee && quizDone && !passedAttempt && (
         <div className="feedback-locked">
@@ -3130,6 +2964,16 @@ function UsersManagement() {
       alert(err.message);
     }
   }
+  async function resetMfa(u) {
+    if (!window.confirm(tr(`إعادة ضبط التحقق الثنائي للمستخدم «${u.name}»؟ سيُطلب منه ربط تطبيق المصادقة من جديد عند الدخول.`, `Reset two-factor authentication for “${u.name}”? They will be asked to link an authenticator app again at sign-in.`))) return;
+    try {
+      const res = await api.resetUserMfa(u.username);
+      alert(res.message);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
   async function deleteUser(u) {
     if (!window.confirm(`حذف حساب «${u.name}» (${u.username}) نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
     try {
@@ -3165,6 +3009,7 @@ function UsersManagement() {
             <th>تاريخ التسجيل</th>
             <th>الدور</th>
             <th>الحالة</th>
+            <th>{tr("التحقق الثنائي", "2FA")}</th>
             <th>إجراءات</th>
           </tr>
         </thead>
@@ -3203,6 +3048,9 @@ function UsersManagement() {
                 </Badge>
               </td>
               <td>
+                {u.mfa_enabled ? <Badge tone="success">{tr("مفعّل", "On")}</Badge> : <Badge tone="warning">{tr("غير مربوط", "Not linked")}</Badge>}
+              </td>
+              <td>
                 {u.status !== "approved" && (
                   <button
                     className="btn btn-small btn-success"
@@ -3234,6 +3082,11 @@ function UsersManagement() {
                     onClick={() => sendReset(u)}
                   >
                     🔑 إعادة تعيين كلمة المرور
+                  </button>
+                )}
+                {u.mfa_enabled && (
+                  <button className="btn btn-small" onClick={() => resetMfa(u)}>
+                    📱 {tr("إعادة ضبط التحقق الثنائي", "Reset 2FA")}
                   </button>
                 )}
               </td>
@@ -3762,10 +3615,18 @@ function AdminDashboard({ user }) {
         >
           التقرير الشخصي السنوي
         </button>
+        <button
+          className={tab === "certs" ? "tab active" : "tab"}
+          onClick={() => setTab("certs")}
+        >
+          🔎 {tr("التحقق من الشهادات", "Verify certificates")}
+        </button>
       </div>
       <ErrorBox message={error} />
       {tab === "stats" && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
       {tab === "stats" && <BackupPanel />}
+      {tab === "stats" && <AuditLog fmt={fmtDateTime} />}
+      {tab === "certs" && <CertificatesPortal />}
       {tab === "users" && <UsersManagement />}
       {tab === "programs" && <ProgramsManagement />}
       {tab === "lectures" && (
@@ -3802,6 +3663,23 @@ export default function App() {
     restore();
   }, []);
 
+  const [verifyCode, setVerifyCode] = useState(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("verify");
+      return v === null ? null : v;
+    } catch (e) {
+      return null;
+    }
+  });
+  useEffect(() => {
+    const expired = () => {
+      setUser(null);
+      setView("home");
+    };
+    window.addEventListener("edu-session-expired", expired);
+    return () => window.removeEventListener("edu-session-expired", expired);
+  }, []);
+
   const [resetToken, setResetToken] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("reset");
@@ -3820,6 +3698,19 @@ export default function App() {
     setUser(null);
     setView("home");
   }, []);
+
+  if (verifyCode !== null) {
+    return (
+      <VerifyPage
+        initialCode={verifyCode}
+        toggle={<LangToggle className="lang-toggle-fixed" />}
+        onBack={() => {
+          window.history.replaceState(null, "", window.location.pathname);
+          setVerifyCode(null);
+        }}
+      />
+    );
+  }
 
   if (resetToken) {
     return (
@@ -3844,9 +3735,10 @@ export default function App() {
   }
 
   if (!user) {
-    return <AuthPage onLoggedIn={setUser} />;
+    return <AuthPage onLoggedIn={setUser} onVerify={() => setVerifyCode("")} />;
   }
 
+  const ready = !!user.email && !user.must_change_password;
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -3884,15 +3776,15 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {!user.email && <ProfilePage user={user} onUpdated={setUser} mustComplete />}
-        {user.email && view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
-        {user.email && view === "home" && user.role === "trainee" && (
+        {(!user.email || user.must_change_password) && <ProfilePage user={user} onUpdated={setUser} mustComplete={!user.email} />}
+        {ready && view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
+        {ready && view === "home" && user.role === "trainee" && (
           <TraineeDashboard user={user} />
         )}
-        {user.email && view === "home" && user.role === "lecturer" && (
+        {ready && view === "home" && user.role === "lecturer" && (
           <LecturerDashboard user={user} />
         )}
-        {user.email && view === "home" && user.role === "admin" && (
+        {ready && view === "home" && user.role === "admin" && (
           <AdminDashboard user={user} />
         )}
       </main>
