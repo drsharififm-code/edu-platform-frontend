@@ -9,8 +9,8 @@
 //   RESEND_API_KEY   → e-mail.   OPENAI_API_KEY / GOOGLE_TTS_API_KEY → optional AI voice.
 // Optional plain variables: TOTP_ISSUER (default "site.sa"), BACKUP_EMAIL, MAIL_FROM.
 
-const ALLOWED_ORIGINS = ["https://edu.sharififcm.com", "https://edu-platform-frontend-bxa.pages.dev"];
-const SITE_URL = "https://edu.sharififcm.com";
+const ALLOWED_ORIGINS = ["https://fcmedu.com", "https://www.fcmedu.com", "https://edu.sharififcm.com", "https://edu-platform-frontend-bxa.pages.dev"];
+const SITE_URL = "https://fcmedu.com";
 const ITERATIONS = 100000; // Workers WebCrypto maximum for PBKDF2
 const SESSION_HOURS_SHORT = 12;
 const SESSION_DAYS_LONG = 7;
@@ -1055,7 +1055,7 @@ async function handleScheduleFile(request, env) {
       "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
       "Cache-Control": "private, max-age=300",
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "frame-ancestors https://edu.sharififcm.com https://edu-platform-frontend-bxa.pages.dev https://view.officeapps.live.com",
+      "Content-Security-Policy": "frame-ancestors https://fcmedu.com https://www.fcmedu.com https://edu.sharififcm.com https://edu-platform-frontend-bxa.pages.dev https://view.officeapps.live.com",
     },
   });
 }
