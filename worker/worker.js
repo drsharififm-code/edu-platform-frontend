@@ -503,7 +503,7 @@ async function sendMail(env, { to, subject, html, attachments }) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.MAIL_FROM || "منصة التعليم الطبي <no-reply@sharififcm.com>", to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
+      body: JSON.stringify({ from: env.MAIL_FROM || "منصة التطوير المهني المستمر بالرعاية الأولية <no-reply@sharififcm.com>", to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
     });
     return res.ok;
   } catch (e) {
@@ -829,7 +829,7 @@ async function createAndSendReset(env, user) {
   const link = `${SITE_URL}/?reset=${encodeURIComponent(token)}`;
   return sendMail(env, {
     to: user.email,
-    subject: "إعادة تعيين كلمة المرور — منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع",
+    subject: "إعادة تعيين كلمة المرور — منصة التطوير المهني المستمر بالرعاية الأولية",
     html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
       <p>مرحباً ${escapeHtml(user.name || user.username)}،</p>
       <p>وصلنا طلب لإعادة تعيين كلمة المرور لحسابك (<b dir="ltr">${escapeHtml(user.username)}</b>).</p>
@@ -986,7 +986,7 @@ async function programFilesMap(env) {
 }
 // The file access key is only revealed to signed-in users.
 async function programsWithFiles(env, withKeys) {
-  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY name").all();
+  const { results } = await env.DB.prepare("SELECT * FROM programs ORDER BY id").all();
   let files = {};
   try {
     files = await programFilesMap(env);
@@ -1048,6 +1048,93 @@ async function handleScheduleDelete(request, env) {
   return ok({ programs: await programsWithFiles(env, true) });
 }
 
+/* ---------------- yearly activity schedules (one file per year) ---------------- */
+function scheduleYear(v) {
+  const y = intId(v);
+  return y && y >= 2020 && y <= 2100 ? y : null;
+}
+let activityTablesReady = false;
+async function ensureActivityTables(env) {
+  if (activityTablesReady) return;
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS activity_files (year INTEGER PRIMARY KEY, filename TEXT NOT NULL, mime TEXT, size INTEGER, access_key TEXT NOT NULL, chunks INTEGER NOT NULL, uploaded_at TEXT DEFAULT (datetime('now')))").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS activity_file_chunks (year INTEGER NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (year, idx))").run();
+  activityTablesReady = true;
+}
+async function activitySchedulesList(env) {
+  await ensureActivityTables(env);
+  const { results } = await env.DB.prepare("SELECT year, filename, mime, size, access_key, uploaded_at FROM activity_files ORDER BY year").all();
+  return results.map((f) => ({ year: f.year, filename: f.filename, mime: f.mime, size: f.size, key: f.access_key, uploaded_at: f.uploaded_at }));
+}
+async function deleteActivityFile(env, year) {
+  await ensureActivityTables(env);
+  await env.DB.prepare("DELETE FROM activity_file_chunks WHERE year = ?").bind(year).run();
+  await env.DB.prepare("DELETE FROM activity_files WHERE year = ?").bind(year).run();
+}
+async function handleActivitySchedulesGet(request, env) {
+  await requireUser(request, env);
+  return ok({ schedules: await activitySchedulesList(env) });
+}
+async function handleActivityScheduleUpload(request, env) {
+  const caller = await requireUser(request, env, ["admin"]);
+  const body = (await readJson(request)) || {};
+  const year = scheduleYear(body.year);
+  const filename = str(body.filename, 200).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_");
+  if (!year || !filename || !body.data) return err(400, "file_incomplete");
+  const ext = (filename.match(/\.([a-z0-9]+)$/i) || [])[1];
+  const mime = ext && SCHEDULE_MIME[ext.toLowerCase()];
+  if (!mime) return err(400, "file_type");
+  const b64 = String(body.data).replace(/^data:[^,]*,/, "");
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(b64.slice(0, 2000))) return err(400, "file_incomplete");
+  const size = Math.floor((b64.length * 3) / 4);
+  if (size > SCHEDULE_MAX_BYTES) return err(400, "file_size");
+  const bytesHead = fromB64(b64.slice(0, 8).padEnd(8, "="));
+  if (ext.toLowerCase() === "pdf" && !(bytesHead[0] === 0x25 && bytesHead[1] === 0x50)) return err(400, "file_type");
+  await deleteActivityFile(env, year);
+  const chunks = Math.ceil(b64.length / CHUNK_CHARS);
+  await env.DB.prepare("INSERT INTO activity_files (year, filename, mime, size, access_key, chunks) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(year, filename, mime, size, newToken(18), chunks)
+    .run();
+  for (let i = 0; i < chunks; i++) {
+    await env.DB.prepare("INSERT INTO activity_file_chunks (year, idx, data) VALUES (?, ?, ?)").bind(year, i, b64.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS)).run();
+  }
+  await audit(env, request, caller.username, "activity_schedule_uploaded", `year ${year}`);
+  return ok({ schedules: await activitySchedulesList(env) });
+}
+async function handleActivityScheduleDelete(request, env) {
+  const caller = await requireUser(request, env, ["admin"]);
+  const body = (await readJson(request)) || {};
+  const year = scheduleYear(body.year);
+  if (!year) return err(400, "bad_request");
+  await deleteActivityFile(env, year);
+  await audit(env, request, caller.username, "activity_schedule_deleted", `year ${year}`);
+  return ok({ schedules: await activitySchedulesList(env) });
+}
+// Opened by URL (PDF / Office viewer), protected by an unguessable key given only to signed-in users.
+async function handleActivityScheduleFile(request, env) {
+  const url = new URL(request.url);
+  const year = scheduleYear(url.searchParams.get("y"));
+  const key = str(url.searchParams.get("k"), 100);
+  const notFound = () => new Response("Not found", { status: 404, headers: { "content-type": "text/plain" } });
+  if (!year || !key) return notFound();
+  await ensureActivityTables(env);
+  const f = await env.DB.prepare("SELECT * FROM activity_files WHERE year = ?").bind(year).first();
+  if (!f || !safeEqual(f.access_key, key)) return notFound();
+  const { results } = await env.DB.prepare("SELECT data FROM activity_file_chunks WHERE year = ? ORDER BY idx").bind(year).all();
+  const bytes = fromB64(results.map((r) => r.data).join(""));
+  const ext = ((f.filename.match(/\.([a-z0-9]+)$/i) || [])[1] || "").toLowerCase();
+  const mime = SCHEDULE_MIME[ext] || "application/octet-stream";
+  const disposition = url.searchParams.get("download") || ext !== "pdf" ? "attachment" : "inline";
+  return new Response(bytes, {
+    headers: {
+      "Content-Type": mime,
+      "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
+      "Cache-Control": "private, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "frame-ancestors https://fcmedu.com https://www.fcmedu.com https://edu.sharififcm.com https://edu-platform-frontend-bxa.pages.dev https://view.officeapps.live.com",
+    },
+  });
+}
+
 // Opened by URL (PDF viewer / Office viewer), protected by an unguessable key given only to signed-in users.
 async function handleScheduleFile(request, env) {
   const url = new URL(request.url);
@@ -1107,10 +1194,10 @@ async function handleUsersPost(request, env) {
     if (status === "approved" && before.email) {
       await sendMail(env, {
         to: before.email,
-        subject: "تم اعتماد حسابك — منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع",
+        subject: "تم اعتماد حسابك — منصة التطوير المهني المستمر بالرعاية الأولية",
         html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
           <p>مرحباً ${escapeHtml(before.name || username)}،</p>
-          <p>تم اعتماد حسابك في <b>منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع</b>.</p>
+          <p>تم اعتماد حسابك في <b>منصة التطوير المهني المستمر بالرعاية الأولية</b>.</p>
           <p>يمكنك الآن تسجيل الدخول باسم المستخدم <b dir="ltr">${escapeHtml(username)}</b> ومتابعة المحاضرات:</p>
           <p><a href="${SITE_URL}">${SITE_URL}</a></p>
           <p>عند أول دخول سيُطلب منك ربط تطبيق مصادقة (Google أو Microsoft Authenticator) للتحقق الثنائي.</p>
@@ -2140,7 +2227,7 @@ async function runMonthlyBackup(env) {
   const rows = Object.entries(b.counts).map(([t, n]) => `<tr><td style="padding:2px 10px">${escapeHtml(t)}</td><td style="padding:2px 10px">${n}</td></tr>`).join("");
   return sendMail(env, {
     to,
-    subject: `نسخة احتياطية شهرية — منصة التعليم الطبي (${b.stamp})`,
+    subject: `نسخة احتياطية شهرية — منصة التطوير المهني المستمر بالرعاية الأولية (${b.stamp})`,
     html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
       <p>مرفق النسخة الاحتياطية الشهرية لقاعدة بيانات المنصة. احفظ الملف في مكان آمن.</p>
       <p style="color:#64748b">لا تحتوي النسخة على كلمات المرور أو مفاتيح التحقق الثنائي (محذوفة عمداً للأمان).</p>
@@ -2206,6 +2293,10 @@ const ROUTES = {
   "POST /api/programs/schedule": handleScheduleUpload,
   "POST /api/programs/schedule/delete": handleScheduleDelete,
   "GET /api/programs/schedule/file": handleScheduleFile,
+  "GET /api/activity-schedules": handleActivitySchedulesGet,
+  "POST /api/activity-schedules": handleActivityScheduleUpload,
+  "POST /api/activity-schedules/delete": handleActivityScheduleDelete,
+  "GET /api/activity-schedules/file": handleActivityScheduleFile,
   "GET /api/lecturers": handleLecturersGet,
   "GET /api/programs": handleProgramsGet,
   "POST /api/programs": handleProgramsPost,
