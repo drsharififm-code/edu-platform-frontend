@@ -183,7 +183,7 @@ export function MfaStep({ challenge, onDone, onCancel }) {
 
   if (result) {
     const text = [
-      tr("رموز الاسترداد — منصة التعليم الطبي", "Recovery codes — Medical e-Learning Platform"),
+      tr("رموز الاسترداد — منصة التطوير المهني المستمر بالرعاية الأولية", "Recovery codes — Primary Care Continuing Professional Development Platform"),
       `${tr("الحساب", "Account")}: ${challenge.account}`,
       tr("كل رمز يُستخدم مرة واحدة إذا فقدت هاتفك.", "Each code works once if you lose your phone."),
       "",
@@ -279,8 +279,8 @@ export function MfaStep({ challenge, onDone, onCancel }) {
 
 /* ---------------- certificate: canvas render → real PDF download ---------------- */
 
-const PLATFORM_AR = "منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع";
-const PLATFORM_EN = "Family & Community Medicine e-Learning Platform";
+const PLATFORM_AR = "منصة التطوير المهني المستمر بالرعاية الأولية";
+const PLATFORM_EN = "Primary Care Continuing Professional Development Platform";
 export const verifyUrl = (code) => `${SITE_URL}/?verify=${encodeURIComponent(code)}`;
 
 let fontLink = null;
@@ -487,7 +487,7 @@ function jpegToPdf(jpegBytes, imgW, imgH) {
   push("\nendstream\nendobj\n");
   const content = `q ${PW} 0 0 ${PH} 0 0 cm /Im0 Do Q`;
   obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
-  obj(6, `<< /Title (Certificate) /Producer (FCM e-Learning Platform) >>`);
+  obj(6, `<< /Title (Certificate) /Producer (Primary Care CPD Platform) >>`);
   const xref = len;
   let x = `xref\n0 7\n0000000000 65535 f \n`;
   for (let i = 1; i <= 6; i++) x += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
@@ -825,6 +825,8 @@ const ACTION_LABELS = {
   lecture_deleted: ["حذف محاضرة", "Lecture deleted"],
   program_deleted: ["حذف برنامج", "Program deleted"],
   schedule_uploaded: ["رفع جدول", "Schedule uploaded"],
+  activity_schedule_uploaded: ["رفع جدول الأنشطة", "Activity schedule uploaded"],
+  activity_schedule_deleted: ["حذف جدول الأنشطة", "Activity schedule deleted"],
   certificate_revoked: ["إلغاء شهادة", "Certificate revoked"],
   certificate_restored: ["إعادة تفعيل شهادة", "Certificate restored"],
   backup_downloaded: ["تنزيل نسخة احتياطية", "Backup downloaded"],
