@@ -7,7 +7,8 @@
 //                      after going live (users would have to reset passwords / 2FA).
 //   TURNSTILE_SECRET → Cloudflare Turnstile secret key (human verification).
 //   RESEND_API_KEY   → e-mail.   OPENAI_API_KEY / GOOGLE_TTS_API_KEY → optional AI voice.
-// Optional plain variables: TOTP_ISSUER (default "site.sa"), BACKUP_EMAIL, MAIL_FROM.
+// Optional plain variables: TOTP_ISSUER (default "site.sa"), BACKUP_EMAIL, MAIL_FROM,
+//   MFA_MODE = "off" to temporarily disable the two-factor step at sign-in.
 
 const ALLOWED_ORIGINS = ["https://fcmedu.com", "https://www.fcmedu.com", "https://edu.sharififcm.com", "https://edu-platform-frontend-bxa.pages.dev"];
 const SITE_URL = "https://fcmedu.com";
@@ -563,6 +564,10 @@ async function verifyTotp(secretB32, code, lastStep = 0) {
   }
   return null;
 }
+// Set the plain variable MFA_MODE = "off" in the Worker settings to sign in without the authenticator step.
+function mfaDisabled(env) {
+  return String(env.MFA_MODE || "").trim().toLowerCase() === "off";
+}
 function totpIssuer(env) {
   return env.TOTP_ISSUER || "site.sa";
 }
@@ -671,6 +676,14 @@ async function handleLogin(request, env) {
   if (upgrade) await env.DB.prepare("UPDATE users SET password_hash = ? WHERE username = ?").bind(await hashPassword(env, password), user.username).run();
   if (passwordProblems(password, user.username).length && !user.must_change_password) {
     await env.DB.prepare("UPDATE users SET must_change_password = 1 WHERE username = ?").bind(user.username).run();
+  }
+  if (mfaDisabled(env)) {
+    // Two-factor temporarily switched off by the administrator (MFA_MODE = "off").
+    await env.DB.prepare("DELETE FROM rate_limits WHERE k = ?").bind(failKey).run();
+    const token = await createSession(env, request, user.username, !!body.keepSignedIn);
+    await audit(env, request, user.username, "login_success", "2FA off");
+    const fresh = await env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(user.username).first();
+    return ok({ token, user: publicUser(fresh) });
   }
   return ok(await createMfaChallenge(env, user, !!body.keepSignedIn));
 }
