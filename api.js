@@ -147,6 +147,9 @@ export const api = {
   },
   uploadSchedule: (payload) => request('/api/programs/schedule', { method: 'POST', body: payload }),
   deleteSchedule: (program_id) => request('/api/programs/schedule/delete', { method: 'POST', body: { program_id } }),
+  getActivitySchedules: () => request('/api/activity-schedules'),
+  uploadActivitySchedule: (payload) => request('/api/activity-schedules', { method: 'POST', body: payload }),
+  deleteActivitySchedule: (year) => request('/api/activity-schedules/delete', { method: 'POST', body: { year } }),
 
   getPrograms: () => request('/api/programs'),
   createProgram: (payload) => request('/api/programs', { method: 'POST', body: payload }),
