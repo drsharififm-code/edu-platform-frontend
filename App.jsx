@@ -591,6 +591,12 @@ function AuthPage({ onLoggedIn, onVerify }) {
     setLoading(true);
     try {
       const data = await api.login({ ...loginForm, cf_turnstile: captcha });
+      if (data.token) {
+        // Two-factor step is switched off on the server: sign in directly.
+        setToken(data.token, loginForm.keepSignedIn);
+        onLoggedIn(data.user);
+        return;
+      }
       setChallenge({ ...data, keep: loginForm.keepSignedIn });
       setLoginForm((f) => ({ ...f, password: "" }));
     } catch (err) {
