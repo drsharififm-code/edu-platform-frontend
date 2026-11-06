@@ -1513,3 +1513,73 @@ tr.risky td { background: #fff1f2; }
 .activity-panel .muted {
   margin: 10px 0 0;
 }
+
+/* Trainee: training programs as rows */
+.program-rows {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.program-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  text-align: start;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.program-row:hover,
+.program-row:focus-visible {
+  border-color: var(--primary);
+  background: #f2f8f7;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
+  outline: none;
+}
+.program-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.program-row-main strong {
+  font-size: 1.05rem;
+  color: var(--primary-dark);
+}
+.program-row-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.program-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.program-row-count {
+  font-size: 0.8rem;
+  background: #e6f2f0;
+  color: var(--primary-dark);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.program-row-arrow {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--primary);
+}
+[dir="ltr"] .program-row-arrow {
+  transform: scaleX(-1);
+}
+.program-head {
+  justify-content: space-between;
+}
