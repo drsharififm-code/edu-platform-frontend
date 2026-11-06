@@ -2797,10 +2797,7 @@ function TraineeDashboard({ user }) {
     setLoading(true);
     setError("");
     try {
-      const [p, l] = await Promise.all([
-        api.getPrograms(),
-        api.getLectures(programFilter || undefined),
-      ]);
+      const [p, l] = await Promise.all([api.getPrograms(), api.getLectures()]);
       setPrograms(p.programs);
       setLectures(l.lectures);
     } catch (err) {
@@ -2808,7 +2805,7 @@ function TraineeDashboard({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [programFilter]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -2827,6 +2824,7 @@ function TraineeDashboard({ user }) {
     );
 
   const currentProgram = programs.find((p) => String(p.id) === String(programFilter));
+  const programLectures = currentProgram ? lectures.filter((l) => l.program_id === currentProgram.id) : [];
 
   return (
     <div className="panel">
@@ -2847,52 +2845,74 @@ function TraineeDashboard({ user }) {
         <PersonalReport isAdmin={false} />
       ) : (
       <>
-      <h2>المحاضرات المتاحة</h2>
-      <div className="toolbar">
-        <label>
-          اختر البرنامج التدريبي
-          <select
-            value={programFilter}
-            onChange={(e) => {
-              setProgramFilter(e.target.value);
-              setShowSchedule(false);
-            }}
-          >
-            <option value="">جميع البرامج</option>
-            {programs.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+      {!currentProgram ? (
+        <>
+          <h2>{tr("البرامج التدريبية", "Training programs")}</h2>
+          <p className="hint">{tr("اختر البرنامج التدريبي لعرض محاضراته.", "Choose a training program to see its lectures.")}</p>
+          {loading && <Spinner />}
+          <ErrorBox message={error} />
+          {!loading && programs.length === 0 && <p className="muted">{tr("لا توجد برامج تدريبية بعد.", "No training programs yet.")}</p>}
+          <ul className="program-rows">
+            {programs.map((p) => {
+              const count = lectures.filter((l) => l.program_id === p.id).length;
+              return (
+                <li key={p.id}>
+                  <button
+                    className="program-row"
+                    onClick={() => {
+                      setProgramFilter(String(p.id));
+                      setShowSchedule(false);
+                    }}
+                  >
+                    <span className="program-row-main">
+                      <strong>{p.name}</strong>
+                      {p.description && <span className="program-row-desc">{p.description}</span>}
+                    </span>
+                    <span className="program-row-meta">
+                      <span className="program-row-count">{tr(`${count} محاضرة`, `${count} lecture${count === 1 ? "" : "s"}`)}</span>
+                      <span className="program-row-arrow" aria-hidden="true">‹</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : (
+        <>
+          <div className="toolbar program-head">
+            <button
+              className="btn btn-small"
+              onClick={() => {
+                setProgramFilter("");
+                setShowSchedule(false);
+              }}
+            >
+              {tr("→ البرامج التدريبية", "← Training programs")}
+            </button>
+            {currentProgram.schedule && !showSchedule && (
+              <button className="btn btn-primary btn-small" onClick={() => setShowSchedule(true)}>
+                📅 جدول المحاضرات السنوي
+              </button>
+            )}
+          </div>
+          <h2>{currentProgram.name}</h2>
+          {currentProgram.description && <p className="hint">{currentProgram.description}</p>}
+          {currentProgram.schedule && showSchedule && (
+            <ScheduleViewer program={currentProgram} onClose={() => setShowSchedule(false)} />
+          )}
+          {loading && <Spinner />}
+          <ErrorBox message={error} />
+          {!loading && programLectures.length === 0 && (
+            <p className="muted">{tr("لا توجد محاضرات في هذا البرنامج حالياً.", "There are no lectures in this program yet.")}</p>
+          )}
+          <div className="lecture-grid">
+            {programLectures.map((l) => (
+              <LectureCard key={l.id} lecture={l} programs={programs} onOpen={setSelected} />
             ))}
-          </select>
-        </label>
-        {currentProgram?.schedule && !showSchedule && (
-          <button className="btn btn-primary btn-small" onClick={() => setShowSchedule(true)}>
-            📅 جدول المحاضرات السنوي
-          </button>
-        )}
-      </div>
-      {currentProgram && !currentProgram.schedule && (
-        <p className="hint">لم يُرفق جدول محاضرات لهذا البرنامج بعد.</p>
+          </div>
+        </>
       )}
-      {currentProgram?.schedule && showSchedule && (
-        <ScheduleViewer program={currentProgram} onClose={() => setShowSchedule(false)} />
-      )}
-      {loading && <Spinner />}
-      <ErrorBox message={error} />
-      {!loading && lectures.length === 0 && (
-        <p className="muted">لا توجد محاضرات متاحة حالياً.</p>
-      )}
-      <div className="lecture-grid">
-        {lectures.map((l) => (
-          <LectureCard
-            key={l.id}
-            lecture={l}
-            programs={programs}
-            onOpen={setSelected}
-          />
-        ))}
-      </div>
       </>
       )}
     </div>
@@ -3746,8 +3766,6 @@ function AdminDashboard({ user }) {
       </div>
       <ErrorBox message={error} />
       {tab === "stats" && (stats ? <StatsCards stats={stats} /> : <Spinner />)}
-      {tab === "stats" && <BackupPanel />}
-      {tab === "stats" && <AuditLog fmt={fmtDateTime} />}
       {tab === "certs" && <CertificatesPortal />}
       {tab === "users" && <UsersManagement />}
       {tab === "programs" && <ProgramsManagement />}
