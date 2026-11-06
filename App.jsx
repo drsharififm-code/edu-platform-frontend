@@ -7,8 +7,7 @@ import { tr, Turnstile, turnstileEnabled, PasswordRules, passwordOk, MfaStep, Ce
 const PROGRAM_LOGO =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIQAAAB6CAMAAABJAgv8AAABIFBMVEX+/v6YpKbO6NS3xsfN19bl6uuttrjY5uVRpmsXOjijqq2q17bEycwwdk1PmGoXZTfa9eYnR0ZyuYeWx6YtaEczVlPQ89c5mldFmVlRh2ZLaGduh4h2lo+X1aqoyLO418mHxphzp4aIt5iVt6top3pWdXO1vcFmmXmEmpm45cUaQ0J2xI5YsnOIqJWt4boZXTQjWzckZDyXnqMaQT1Fd1bW3eE3oVpGhFxFpFxotHwiOzs4gllDWVlje3sdaEAiQD04mmNjhnlEZVzj+t06ZWM5omSN0ZcVP0Q8hGBesYAbVlJJX2JmeoC58scAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADfPnBAAAAYHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8AAAAAAAAAAAAAAAAAAAAAAAAEoWZuAAAJGUlEQVR42u1aaXfiuBLFli1veLfBNph9h7CEkKWT7vQ+M+/N/P+/82QCRpZEeizmnfc+UCd9EgyRrqpu3SpVulK52tWudrWrXe1qV7va1a52tav935gjGi1DvGSF2rLjPXleWuNdQOw+2/bKtu+63DjSRT1SkdUjj2+NfrAymz2/NzBXwQ3fKbzPqj91Kk7N8CLV4IjEYHXnH35u3a0GDkcoPKuTv1iqUav0Cl3bOjlQUe3m/rvRG1txHFvNvnTm8KIkSeLbb3o/UhzSwirrC38dF16PNz2xY5m2bZuZZd+7bWJ/Y75Q7+vI7u9Vb278rHeK76tqOXrW7r4WieTcBeZ6E/da+8ei1Oo+rFbx6Wiiv/hx/0P1Op3USP2Op1pRtCD2TCO/pCN6JE1te1zE1R5vjo+mXlRX53gyO6kapSTN1EEpEFZAZpT4bJO4Km3LNtHhlp5leWS8l48qlZQdtUyeymZM47IZeeqbm8H8s9WhFzfuF/Sz+rRMgptjOl1WLLEQ45XJ1CE2CONSEHb/jJ6MWc+n0aUgFPML9Wxgn1lhYLNQ1B5VSt9a9WUZYj7ckSs4z8/nsnwc9BhPvYgigFdOKAZr8tjG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";
 
-const PLATFORM_NAME = "منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع";
-const COPYRIGHT = "© Dr.sharifi.edu";
+const PLATFORM_NAME = "منصة التطوير المهني المستمر بالرعاية الأولية";
 
 const ROLE_LABELS = { trainee: "متدرب", lecturer: "محاضر", admin: "مشرف" };
 const STATUS_LABELS = { draft: "مسودة", approved: "معتمدة" };
@@ -34,10 +33,6 @@ function ErrorBox({ message }) {
 function SuccessBox({ message }) {
   if (!message) return null;
   return <div className="success-box">{message}</div>;
-}
-
-function CopyrightMark({ className = "" }) {
-  return <div className={`copyright-mark ${className}`}>{COPYRIGHT}</div>;
 }
 
 function LangToggle({ className = "" }) {
@@ -115,7 +110,7 @@ function BackupPanel() {
 }
 
 const JOB_TITLES = ["SHO", "REGISTRAR", "SENIOR REGISTRAR", "CONSULTANT", "TRAINEE"];
-const PROGRAM_PRESETS = ["Urgent", "Mental", "SBFM", "Women Health", "CPD", "Flexible SBFM", "Home Care"];
+const PROGRAM_PRESETS = ["Women Health", "Family Medicine", "Urgent Care", "Telemedicine", "Chronic Disease", "Well Baby", "Home Care", "Respiratory Care", "Primary Mental Health"];
 const OTHER = "__other__";
 
 function PasswordInput({ value, onChange, autoComplete, required, placeholder, minLength }) {
@@ -196,17 +191,17 @@ function scheduleFileUrl(schedule, download = false) {
   return `${API_BASE}/api/programs/schedule/file?id=${schedule.id}&k=${encodeURIComponent(schedule.key)}${download ? "&download=1" : ""}`;
 }
 
-function ScheduleViewer({ program, onClose }) {
+function ScheduleViewer({ program, onClose, title, fileUrl }) {
   const sch = program.schedule;
   const isPdf = /\.pdf$/i.test(sch.filename) || sch.mime === "application/pdf";
-  const url = scheduleFileUrl(sch);
+  const url = fileUrl ? fileUrl(sch) : scheduleFileUrl(sch);
   const src = isPdf ? url : `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
   return (
     <div className="schedule-viewer">
       <div className="schedule-viewer-head">
-        <strong>📅 جدول محاضرات برنامج «{program.name}»</strong>
+        <strong>📅 {title || <>جدول محاضرات برنامج «{program.name}»</>}</strong>
         <div className="schedule-viewer-actions">
-          <a className="btn btn-small" href={scheduleFileUrl(sch, true)} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn-small" href={fileUrl ? fileUrl(sch, true) : scheduleFileUrl(sch, true)} target="_blank" rel="noopener noreferrer">
             ⬇ تحميل
           </a>
           <a className="btn btn-small" href={isPdf ? url : src} target="_blank" rel="noopener noreferrer">
@@ -223,6 +218,123 @@ function ScheduleViewer({ program, onClose }) {
         <iframe src={src} title="schedule" />
       </div>
       <p className="hint">{sch.filename}</p>
+    </div>
+  );
+}
+
+function activityFileUrl(sch, download = false) {
+  if (!sch) return "";
+  return `${API_BASE}/api/activity-schedules/file?y=${sch.year}&k=${encodeURIComponent(sch.key)}${download ? "&download=1" : ""}`;
+}
+
+// Yearly activity schedule: the admin picks a year and uploads its schedule; trainees view it.
+function ActivitySchedulePanel({ isAdmin }) {
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState(thisYear);
+  const [schedules, setSchedules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [open, setOpen] = useState(!isAdmin);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .getActivitySchedules()
+      .then((d) => alive && setSchedules(d.schedules || []))
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const years = Array.from(new Set([thisYear - 1, thisYear, thisYear + 1, thisYear + 2, ...schedules.map((s) => s.year)])).sort();
+  const current = schedules.find((s) => s.year === Number(year));
+
+  async function upload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setSuccess("");
+    if (!/\.(pdf|xlsx|xls|csv)$/i.test(file.name)) return setError("الصيغ المسموحة: PDF أو Excel (xlsx / xls).");
+    if (file.size > 8 * 1024 * 1024) return setError("حجم الملف أكبر من 8 ميجابايت.");
+    setBusy(true);
+    try {
+      const data = await readFileAsDataUrl(file);
+      const res = await api.uploadActivitySchedule({ year: Number(year), filename: file.name, data });
+      setSchedules(res.schedules || []);
+      setSuccess(tr(`تم رفع جدول الأنشطة لعام ${year}.`, `Activity schedule for ${year} uploaded.`));
+      setOpen(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(tr(`حذف جدول الأنشطة لعام ${year}؟`, `Delete the ${year} activity schedule?`))) return;
+    setError("");
+    setSuccess("");
+    try {
+      const res = await api.deleteActivitySchedule(Number(year));
+      setSchedules(res.schedules || []);
+      setSuccess(tr("تم حذف جدول الأنشطة.", "Activity schedule deleted."));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <div className="activity-panel">
+      <div className="activity-bar">
+        <strong>📅 {tr("جدول الأنشطة", "Activity schedule")}</strong>
+        <label className="activity-year">
+          {tr("العام", "Year")}
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </label>
+        {isAdmin && (
+          <label className={`btn btn-small btn-primary${busy ? " disabled" : ""}`}>
+            {busy ? tr("جارٍ الرفع…", "Uploading…") : current ? tr("📎 تغيير جدول الأنشطة", "📎 Replace schedule") : tr("📎 رفع جدول الأنشطة لهذا العام", "📎 Upload this year's schedule")}
+            <input type="file" accept=".pdf,.xlsx,.xls,.csv" hidden disabled={busy} onChange={upload} />
+          </label>
+        )}
+        {current && !open && (
+          <button className="btn btn-small" onClick={() => setOpen(true)}>
+            {tr("👁 عرض الجدول", "👁 View schedule")}
+          </button>
+        )}
+        {isAdmin && current && (
+          <button className="btn btn-danger btn-small" onClick={remove}>
+            {tr("🗑 حذف", "🗑 Delete")}
+          </button>
+        )}
+      </div>
+      <ErrorBox message={error} />
+      <SuccessBox message={success} />
+      {loading ? (
+        <Spinner />
+      ) : current ? (
+        open && (
+          <ScheduleViewer
+            program={{ name: String(year), schedule: current }}
+            title={tr(`جدول الأنشطة لعام ${year}`, `Activity schedule ${year}`)}
+            fileUrl={activityFileUrl}
+            onClose={isAdmin ? () => setOpen(false) : undefined}
+          />
+        )
+      ) : (
+        <p className="muted">{tr(`لم يُرفع جدول الأنشطة لعام ${year} بعد.`, `No activity schedule has been uploaded for ${year} yet.`)}</p>
+      )}
     </div>
   );
 }
@@ -678,7 +790,6 @@ function AuthPage({ onLoggedIn, onVerify }) {
               onLoggedIn(data.user);
             }}
           />
-          <CopyrightMark className="auth-copyright" />
         </div>
       </div>
     );
@@ -825,7 +936,6 @@ function AuthPage({ onLoggedIn, onVerify }) {
             </button>
           </form>
         )}
-        <CopyrightMark className="auth-copyright" />
       </div>
     </div>
   );
@@ -2721,6 +2831,9 @@ function TraineeDashboard({ user }) {
   return (
     <div className="panel">
       <div className="sub-tabs">
+        <button className={view === "activities" ? "tab active" : "tab"} onClick={() => setView("activities")}>
+          📅 {tr("جدول الأنشطة", "Activity schedule")}
+        </button>
         <button className={view === "lectures" ? "tab active" : "tab"} onClick={() => setView("lectures")}>
           📚 المحاضرات
         </button>
@@ -2728,7 +2841,9 @@ function TraineeDashboard({ user }) {
           📊 تقريري السنوي
         </button>
       </div>
-      {view === "report" ? (
+      {view === "activities" ? (
+        <ActivitySchedulePanel isAdmin={false} />
+      ) : view === "report" ? (
         <PersonalReport isAdmin={false} />
       ) : (
       <>
@@ -3210,6 +3325,7 @@ function ProgramsManagement() {
 
   return (
     <div className="programs-admin">
+      <ActivitySchedulePanel isAdmin />
       <ErrorBox message={error} />
       <SuccessBox message={success} />
       {viewing && <ScheduleViewer program={viewing} onClose={() => setViewing(null)} />}
@@ -3777,7 +3893,6 @@ export default function App() {
               خروج
             </button>
           </div>
-          <CopyrightMark className="header-copyright" />
         </div>
       </header>
 
