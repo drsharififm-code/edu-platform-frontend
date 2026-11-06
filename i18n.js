@@ -24,7 +24,7 @@ export function setLang(lang) {
 
 const EN = {
   // ---- platform / navigation
-  "منصة التعليم الطبي الالكتروني بطب الأسرة والمجتمع": "Family & Community Medicine e-Learning Platform",
+  "منصة التطوير المهني المستمر بالرعاية الأولية": "Primary Care Continuing Professional Development Platform",
   "الرئيسية": "Home",
   "الملف الشخصي": "Profile",
   "خروج": "Log out",
