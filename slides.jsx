@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import JSZip from "jszip";
 import { api } from "./api.js";
+import { openPdf, closePdf } from "./pdfdeck.js";
 
 export const VOICE_OPTIONS = [
   { value: "m1", label: "صوت رجالي 1" },
@@ -283,7 +284,85 @@ function speakWithBrowser(text, onEnd, voiceId) {
   return true;
 }
 
-export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
+// Renders one page of the lecture PDF exactly as designed (fits the container width).
+function PdfSlideView({ loader, index, total }) {
+  const holderRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [doc, setDoc] = useState(null);
+  const [error, setError] = useState("");
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    let loaded = null;
+    setError("");
+    loader()
+      .then((data) => openPdf(new Uint8Array(data)))
+      .then((d) => {
+        loaded = d;
+        if (alive) setDoc(d);
+        else closePdf(d);
+      })
+      .catch(() => alive && setError("تعذّر تحميل ملف المحاضرة (PDF). حدّث الصفحة وحاول مرة أخرى."));
+    return () => {
+      alive = false;
+      if (loaded) closePdf(loaded);
+    };
+  }, [loader]);
+
+  useEffect(() => {
+    const el = holderRef.current;
+    if (!el) return undefined;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!doc || !width || !canvasRef.current) return undefined;
+    let task = null;
+    let cancelled = false;
+    doc
+      .getPage(Math.min(index + 1, doc.numPages))
+      .then((page) => {
+        if (cancelled) return;
+        const base = page.getViewport({ scale: 1 });
+        const scale = width / base.width;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const viewport = page.getViewport({ scale: scale * dpr });
+        const canvas = canvasRef.current;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
+        canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
+        task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+        return task.promise;
+      })
+      .catch((e) => {
+        if (e && e.name === "RenderingCancelledException") return;
+        if (!cancelled) setError("تعذّر عرض الشريحة.");
+      });
+    return () => {
+      cancelled = true;
+      if (task) task.cancel();
+    };
+  }, [doc, index, width]);
+
+  return (
+    <div className="pdf-slide" ref={holderRef}>
+      {error ? <div className="error-box">{error}</div> : !doc ? <div className="pdf-slide-loading">⏳ جارِ تحميل الشرائح…</div> : null}
+      <canvas ref={canvasRef} className="pdf-slide-canvas" aria-label={`الشريحة ${index + 1} من ${total}`} />
+      <div className="slide-number pdf-slide-number" dir="ltr">
+        {index + 1} / {total}
+      </div>
+    </div>
+  );
+}
+
+export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader }) {
   const slides = deck?.slides || [];
   const voice = normalizeVoice(deck?.voice);
   const [index, setIndex] = useState(0);
@@ -299,6 +378,10 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
   const pendingSecondsRef = useRef(0);
   const tokenRef = useRef(0); // invalidates stale "ended" callbacks
   const [heard, setHeard] = useState(() => new Set());
+  const heardRef = useRef(heard);
+  useEffect(() => {
+    heardRef.current = heard;
+  }, [heard]);
 
   useEffect(() => {
     indexRef.current = index;
@@ -359,14 +442,21 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
       return next;
     });
     if (trackTime && lectureId) api.slideProgress(lectureId, i).catch(() => {});
-    if (i < slides.length - 1) {
+    // The lecture counts as completed only when every slide was listened to.
+    const isNew = !heardRef.current.has(i);
+    const all = heardRef.current.size + (isNew ? 1 : 0) >= slides.length;
+    if (all && (isNew || i === slides.length - 1)) {
+      playingRef.current = false;
+      setPlaying(false);
+      setFinished(true);
+      onComplete && onComplete();
+    } else if (i < slides.length - 1) {
       setIndex(i + 1);
       // playback continues via effect below
     } else {
       playingRef.current = false;
       setPlaying(false);
       setFinished(true);
-      onComplete && onComplete();
     }
   }, [slides.length, onComplete, trackTime, lectureId]);
 
@@ -470,8 +560,14 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
   const rtl = isArabic(slide.title + slide.bullets.join(" "));
   const progress = ((index + 1) / slides.length) * 100;
 
+  const isPdf = deck?.kind === "pdf" && !!pdfLoader;
+  const missing = slides.map((_, i) => i).filter((i) => !heard.has(i));
+
   return (
     <div className="slide-player">
+      {isPdf ? (
+        <PdfSlideView loader={pdfLoader} index={index} total={slides.length} />
+      ) : (
       <div className="slide-stage">
         <div className={`slide-card ${rtl ? "rtl" : "ltr"}`} dir={rtl ? "rtl" : "ltr"}>
           {slide.title && <h3 className="slide-title">{slide.title}</h3>}
@@ -487,6 +583,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
           </div>
         </div>
       </div>
+      )}
       <div className="slide-progress">
         <div className="slide-progress-bar" style={{ width: `${progress}%` }} />
       </div>
@@ -516,7 +613,15 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete }) {
         <p className="hint">يتم استخدام صوت المتصفح حالياً لأن خدمة الصوت الاحترافي (Google) غير مفعّلة بعد.</p>
       )}
       {error && <div className="error-box">{error}</div>}
-      {index === slides.length - 1 && !finished && (
+      {trackTime && finished && missing.length > 0 && (
+        <div className="feedback-locked">
+          ⚠️ لم تكتمل المحاضرة بعد: بقيت {missing.length} شريحة لم تستمع إليها كاملة. يُفتح الاختبار البعدي بعد الاستماع لجميع الشرائح.{" "}
+          <button className="btn btn-small" onClick={() => goTo(missing[0])}>
+            الانتقال إلى الشريحة {missing[0] + 1}
+          </button>
+        </div>
+      )}
+      {!trackTime && index === slides.length - 1 && !finished && (
         <button
           className="btn btn-success btn-small"
           onClick={() => {
