@@ -563,9 +563,6 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
           <button className="btn btn-primary" disabled={busy} onClick={download}>
             {busy ? "…" : `⬇ ${tr("تحميل الشهادة PDF", "Download certificate (PDF)")}`}
           </button>
-          <a className="btn btn-small" href={verifyUrl(cert.code)} target="_blank" rel="noopener noreferrer">
-            🔎 {tr("صفحة التحقق", "Verification page")}
-          </a>
         </div>
       )}
     </div>
