@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken, API_BASE } from "./api.js";
 import { getLang, setLang, dateLocale } from "./i18n.js";
-import { SlidePlayer, parsePptx, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
+import { SlidePlayer, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
+import { extractPdfSlides } from "./pdfdeck.js";
 import { tr, Turnstile, turnstileEnabled, PasswordRules, passwordOk, MfaStep, CertificateCard, VerifyPage, CertificatesPortal, AuditLog, safeHref } from "./secure.jsx";
 
 const PROGRAM_LOGO =
@@ -1191,7 +1192,7 @@ function QuizGenerator({ deck, title, onGenerated }) {
     if (!file) return;
     setError("");
     try {
-      const slides = await parsePptx(file);
+      const slides = await extractPdfSlides(file);
       setFileText(deckToText({ slides }));
       setFileName(file.name);
     } catch (err) {
@@ -1204,7 +1205,7 @@ function QuizGenerator({ deck, title, onGenerated }) {
     setError("");
     setInfo("");
     if (text.trim().length < 80) {
-      setError("أرفق ملف المحاضرة (PowerPoint) أو الصق نصها أولاً — النص الحالي غير كافٍ.");
+      setError("أرفق ملف المحاضرة (PDF) أو الصق نصها أولاً — النص الحالي غير كافٍ.");
       return;
     }
     setBusy(true);
@@ -1233,16 +1234,16 @@ function QuizGenerator({ deck, title, onGenerated }) {
         <div className="quiz-generator-box">
           <strong>✨ إنشاء أسئلة الاختبار البعدي بالذكاء الاصطناعي</strong>
           <p className="hint">
-            يقرأ النظام محتوى المحاضرة ويقترح 3 أسئلة اختيار من متعدد مع الإجابات الصحيحة، ثم يمكنك تعديلها.
+            يقرأ الذكاء الاصطناعي نصوص كل شريحة في المحاضرة (دون أي تعديل على العرض) ويستخرج 3 أسئلة اختيار من متعدد مع الإجابات الصحيحة، ثم يمكنك مراجعتها وتعديلها.
           </p>
           <ul className="gen-sources">
             {deckText ? (
-              <li>✅ نص الشرائح الصوتية المرفقة ({deck.slides.length} شريحة)</li>
+              <li>✅ نصوص شرائح المحاضرة المرفوعة ({deck.slides.length} شريحة)</li>
             ) : null}
             <li>
               <label className="btn btn-small file-btn">
-                📎 {fileName ? "تغيير ملف PowerPoint" : "إرفاق ملف المحاضرة (PowerPoint ‎.pptx)"}
-                <input type="file" accept=".pptx" hidden onChange={onFile} />
+                📎 {fileName ? "تغيير ملف PDF" : "إرفاق ملف المحاضرة (PDF)"}
+                <input type="file" accept=".pdf,application/pdf" hidden onChange={onFile} />
               </label>
               {fileName && <span className="muted"> {fileName} ✓</span>}
             </li>
@@ -1267,7 +1268,7 @@ function QuizGenerator({ deck, title, onGenerated }) {
   );
 }
 
-function SlidesEditor({ deck, setDeck }) {
+function SlidesEditor({ deck, setDeck, setPdfFile }) {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -1279,9 +1280,10 @@ function SlidesEditor({ deck, setDeck }) {
     setError("");
     setParsing(true);
     try {
-      const slides = await parsePptx(file);
-      setDeck({ voice: normalizeVoice(deck?.voice), file_name: file.name, slides });
-      setOpen(true);
+      const slides = await extractPdfSlides(file);
+      setDeck({ kind: "pdf", voice: normalizeVoice(deck?.voice), file_name: file.name, slides });
+      setPdfFile && setPdfFile(file);
+      setOpen(false);
     } catch (err) {
       setError(err.message || "تعذّرت قراءة الملف.");
     } finally {
@@ -1299,20 +1301,26 @@ function SlidesEditor({ deck, setDeck }) {
   return (
     <div className="slides-editor">
       <div className="links-header">
-        <span>🎙 عرض الشرائح بصوت الذكاء الاصطناعي</span>
+        <span>🎙 عرض المحاضرة (PDF) مع قراءة صوتية بالذكاء الاصطناعي</span>
       </div>
       <p className="hint">
-        ارفع ملف PowerPoint (‎.pptx) وستُعرض الشرائح للمتدرب واحدة تلو الأخرى مع
-        قراءة صوتية. تُقرأ ملاحظات المتحدث (Speaker Notes) إن وُجدت، وإلا يُقرأ نص
-        الشريحة، ويمكنك تعديل النص المقروء لكل شريحة.
+        احفظ عرض PowerPoint بصيغة PDF (ملف ← حفظ باسم ← PDF) ثم ارفعه هنا. تُعرض
+        الشرائح للمتدرب كما صمّمتها تماماً دون أي تعديل، شريحة تلو الأخرى، ويقرأ
+        الذكاء الاصطناعي نص كل شريحة صوتياً. يمكنك تعديل النص المقروء لكل شريحة (لا يغيّر شكل الشريحة).
+        الحد الأقصى 20 ميجابايت.
       </p>
+      {deck && deck.kind !== "pdf" && (
+        <p className="hint warn-text">
+          ⚠️ هذه المحاضرة مرفوعة بالطريقة القديمة (نص الشرائح فقط). لعرضها كما صُمّمت، ارفع نسخة PDF منها.
+        </p>
+      )}
       <ErrorBox message={error} />
       <div className="slides-editor-row">
         <label className="btn btn-small file-btn">
-          {parsing ? "جارِ قراءة الملف…" : deck ? "استبدال الملف" : "📤 رفع ملف PowerPoint"}
+          {parsing ? "جارِ قراءة الملف…" : deck ? "استبدال الملف (PDF)" : "📤 رفع ملف المحاضرة (PDF)"}
           <input
             type="file"
-            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            accept=".pdf,application/pdf"
             onChange={handleFile}
             disabled={parsing}
             hidden
@@ -1334,7 +1342,10 @@ function SlidesEditor({ deck, setDeck }) {
             <button
               type="button"
               className="btn btn-danger btn-small"
-              onClick={() => setDeck(null)}
+              onClick={() => {
+                setDeck(null);
+                setPdfFile && setPdfFile(null);
+              }}
             >
               إزالة الشرائح
             </button>
@@ -1354,7 +1365,9 @@ function SlidesEditor({ deck, setDeck }) {
             <ol className="narration-list">
               {deck.slides.map((s, i) => (
                 <li key={i}>
-                  <strong>{s.title || `شريحة ${i + 1}`}</strong>
+                  <strong>
+                    {i + 1}. {s.title || `شريحة ${i + 1}`}
+                  </strong>
                   <textarea
                     rows={3}
                     value={s.narration}
@@ -1385,6 +1398,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     extra_links: initial?.extra_links?.length ? initial.extra_links : [],
   }));
   const [deck, setDeck] = useState(initial?.slides || null);
+  const [pdfFile, setPdfFile] = useState(null);
   const [existingQuiz, setExistingQuiz] = useState(null);
   const [lecturers, setLecturers] = useState([]);
   useEffect(() => {
@@ -1442,7 +1456,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
     e.preventDefault();
     setError("");
     if (!form.video_url.trim() && !form.slides_url.trim() && !deck) {
-      setError("أضف محتوى علمياً واحداً على الأقل: رابط فيديو، أو رابط محاضرة PowerPoint، أو ملف شرائح صوتية.");
+      setError("أضف محتوى علمياً واحداً على الأقل: رابط فيديو، أو رابط محاضرة، أو ملف المحاضرة (PDF).");
       return;
     }
     if (!form.program_id) {
@@ -1463,6 +1477,15 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
       } else {
         const res = await api.createLecture(payload);
         lectureId = res.id;
+      }
+      if (lectureId && pdfFile && deck?.kind === "pdf") {
+        try {
+          await api.uploadLecturePdf(lectureId, pdfFile);
+          setPdfFile(null);
+        } catch (err) {
+          if (!form.id) setForm((f) => ({ ...f, id: lectureId }));
+          throw new Error(`تم حفظ بيانات المحاضرة لكن تعذّر رفع ملف PDF: ${err.message}`);
+        }
       }
       if (lectureId) {
         const payload = shortQuizPayload(lectureId, form.title, mcqs);
@@ -1577,7 +1600,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
       </label>
 
       <div className="full">
-        <SlidesEditor deck={deck} setDeck={setDeck} />
+        <SlidesEditor deck={deck} setDeck={setDeck} setPdfFile={setPdfFile} />
       </div>
 
       <div className="full">
@@ -1616,7 +1639,7 @@ function LectureForm({ programs, initial, onSaved, onCancel }) {
           <span>📝 الاختبار البعدي Post-test (3 أسئلة اختيار من متعدد) *</span>
         </div>
         <p className="hint">
-          إلزامي: يظهر للمتدرب بعد إكمال محتوى المحاضرة (الفيديو، محاضرة PowerPoint، أو الشرائح الصوتية).
+          إلزامي: لا يظهر للمتدرب إلا بعد إنجاز المحاضرة كاملة (الاستماع لجميع الشرائح ومشاهدة الفيديو إن وُجد).
           {existingQuiz ? " يمكنك تعديل الأسئلة والإجابات هنا ثم الحفظ." : ""}
         </p>
         <QuizGenerator deck={deck} title={form.title} onGenerated={applyGenerated} />
@@ -2308,18 +2331,20 @@ function writeDone(username, lectureId, item) {
 const CONTENT_LABELS = {
   video: "مشاهدة الفيديو",
   ppt: "الاطلاع على محاضرة PowerPoint",
-  deck: "الاستماع لعرض الشرائح الصوتي",
+  deck: "الاستماع لجميع شرائح المحاضرة",
 };
 
-function LectureDetail({ lecture, user, onBack }) {
+function LectureDetail({ lecture, user, onBack, mode }) {
   const [quizzes, setQuizzes] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [attemptedQuizIds, setAttemptedQuizIds] = useState([]);
   const [myAttempts, setMyAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const isTrainee = user.role === "trainee";
-  const canModerate = user.role === "admin" || user.role === "lecturer";
+  // Lecturers attend lectures exactly like trainees; they manage their own lectures from «محاضراتي» (mode="manage").
+  const isTrainee = user.role === "trainee" || (user.role === "lecturer" && mode !== "manage");
+  const canModerate = user.role === "admin" || (user.role === "lecturer" && mode === "manage");
+  const pdfLoader = useCallback(() => api.getLecturePdf(lecture.id), [lecture.id]);
   const embed = toEmbedUrl(lecture.video_url);
   const directVideo =
     !embed && isDirectVideoUrl(lecture.video_url) ? lecture.video_url : null;
@@ -2465,6 +2490,31 @@ function LectureDetail({ lecture, user, onBack }) {
     load();
   }, [load]);
 
+  // The server only sends the questions after the whole lecture is completed → fetch them then.
+  const quizLocked = quizzes.some((q) => q.locked);
+  const [unlockFailed, setUnlockFailed] = useState(false);
+  useEffect(() => {
+    if (!isTrainee || !contentDone || !quizLocked) return undefined;
+    let alive = true;
+    setUnlockFailed(false);
+    const fetchQuiz = (retry) =>
+      api
+        .getQuizzes(lecture.id)
+        .then((q) => {
+          if (!alive) return;
+          if (q.quizzes.some((x) => x.locked)) {
+            if (retry) setTimeout(() => alive && fetchQuiz(false), 1500);
+            else setUnlockFailed(true);
+          } else setQuizzes(q.quizzes);
+        })
+        .catch(() => alive && retry && setTimeout(() => alive && fetchQuiz(false), 1500));
+    const t = setTimeout(() => fetchQuiz(true), 600);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [isTrainee, contentDone, quizLocked, lecture.id]);
+
   if (isTrainee && expired) {
     return (
       <div className="panel">
@@ -2594,7 +2644,7 @@ function LectureDetail({ lecture, user, onBack }) {
       {hasSlides && (
         <div className="content-block slides-section">
           <div className="content-block-head">
-            <h3 className="section-title">🎙 عرض الشرائح الصوتي</h3>
+            <h3 className="section-title">🎙 المحاضرة</h3>
             {isTrainee && done.deck && <span className="content-done-tag">✔ تم الاستماع</span>}
           </div>
           <SlidePlayer
@@ -2602,6 +2652,7 @@ function LectureDetail({ lecture, user, onBack }) {
             lectureId={lecture.id}
             trackTime={isTrainee}
             onComplete={markDeckDone}
+            pdfLoader={lecture.slides?.kind === "pdf" ? pdfLoader : null}
           />
         </div>
       )}
@@ -2649,7 +2700,15 @@ function LectureDetail({ lecture, user, onBack }) {
               ))}
             </ul>
           )}
+          {contentDone && quizLocked && (
+            <div className="feedback-locked">
+              {unlockFailed
+                ? "⚠️ لم تُسجَّل لدى المنصة جميع الشرائح بعد. أعد تشغيل الشرائح التي لم تكتمل حتى نهايتها، ثم حدّث الصفحة."
+                : "⏳ جارِ فتح أسئلة الاختبار…"}
+            </div>
+          )}
           {contentDone &&
+            !quizLocked &&
             quizzes.map((quiz) => (
               <PostTestAttempts
                 key={quiz.id}
@@ -2734,7 +2793,7 @@ function LectureCard({
           <Badge tone={lecture.status === "approved" ? "success" : "warning"}>
             {STATUS_LABELS[lecture.status]}
           </Badge>
-          {lecture.slides?.slides?.length > 0 && <Badge>🎙 شرائح صوتية</Badge>}
+          {lecture.slides?.slides?.length > 0 && <Badge>🎙 محاضرة بالشرائح</Badge>}
           {lecture.available_until && (
             <Badge tone={isLectureExpired(lecture) ? "danger" : "default"}>
               {isLectureExpired(lecture) ? "انتهت" : "حتى"}{" "}
@@ -2799,7 +2858,8 @@ function TraineeDashboard({ user }) {
     try {
       const [p, l] = await Promise.all([api.getPrograms(), api.getLectures()]);
       setPrograms(p.programs);
-      setLectures(l.lectures);
+      // Learners see only approved, still-available lectures (a lecturer's own drafts stay in «محاضراتي»).
+      setLectures(l.lectures.filter((x) => x.status === "approved" && !isLectureExpired(x)));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -2823,12 +2883,17 @@ function TraineeDashboard({ user }) {
       />
     );
 
-  const currentProgram = programs.find((p) => String(p.id) === String(programFilter));
-  const programLectures = currentProgram ? lectures.filter((l) => l.program_id === currentProgram.id) : [];
+  if (view === "mine" && user.role === "lecturer")
+    return (
+      <div className="panel">
+        <div className="sub-tabs">{tabs()}</div>
+        <LecturerDashboard user={user} embedded />
+      </div>
+    );
 
-  return (
-    <div className="panel">
-      <div className="sub-tabs">
+  function tabs() {
+    return (
+      <>
         <button className={view === "activities" ? "tab active" : "tab"} onClick={() => setView("activities")}>
           📅 {tr("جدول الأنشطة", "Activity schedule")}
         </button>
@@ -2838,7 +2903,21 @@ function TraineeDashboard({ user }) {
         <button className={view === "report" ? "tab active" : "tab"} onClick={() => setView("report")}>
           📊 تقريري السنوي
         </button>
-      </div>
+        {user.role === "lecturer" && (
+          <button className={view === "mine" ? "tab active" : "tab"} onClick={() => setView("mine")}>
+            🧑‍🏫 محاضراتي (إضافة وإدارة)
+          </button>
+        )}
+      </>
+    );
+  }
+
+  const currentProgram = programs.find((p) => String(p.id) === String(programFilter));
+  const programLectures = currentProgram ? lectures.filter((l) => l.program_id === currentProgram.id) : [];
+
+  return (
+    <div className="panel">
+      <div className="sub-tabs">{tabs()}</div>
       {view === "activities" ? (
         <ActivitySchedulePanel isAdmin={false} />
       ) : view === "report" ? (
@@ -2921,7 +3000,7 @@ function TraineeDashboard({ user }) {
 
 /* ---------------- Lecturer dashboard ---------------- */
 
-function LecturerDashboard({ user }) {
+function LecturerDashboard({ user, embedded }) {
   const [programs, setPrograms] = useState([]);
   const [lectures, setLectures] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -2936,13 +3015,13 @@ function LecturerDashboard({ user }) {
     try {
       const [p, l] = await Promise.all([api.getPrograms(), api.getLectures()]);
       setPrograms(p.programs);
-      setLectures(l.lectures);
+      setLectures(l.lectures.filter((x) => x.lecturer_username === user.username));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.username]);
 
   useEffect(() => {
     load();
@@ -2963,6 +3042,7 @@ function LecturerDashboard({ user }) {
       <LectureDetail
         lecture={selected}
         user={user}
+        mode="manage"
         onBack={() => {
           setSelected(null);
           load();
@@ -3004,7 +3084,7 @@ function LecturerDashboard({ user }) {
   }
 
   return (
-    <div className="panel">
+    <div className={embedded ? "" : "panel"}>
       <div className="toolbar">
         <h2>محاضراتي</h2>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
@@ -3917,11 +3997,8 @@ export default function App() {
       <main className="app-main">
         {(!user.email || user.must_change_password) && <ProfilePage user={user} onUpdated={setUser} mustComplete={!user.email} />}
         {ready && view === "profile" && <ProfilePage user={user} onUpdated={setUser} />}
-        {ready && view === "home" && user.role === "trainee" && (
+        {ready && view === "home" && (user.role === "trainee" || user.role === "lecturer") && (
           <TraineeDashboard user={user} />
-        )}
-        {ready && view === "home" && user.role === "lecturer" && (
-          <LecturerDashboard user={user} />
         )}
         {ready && view === "home" && user.role === "admin" && (
           <AdminDashboard user={user} />
