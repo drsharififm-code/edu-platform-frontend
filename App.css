@@ -1117,15 +1117,17 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 0 14px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: #fff;
   min-height: 132px;
+  overflow: hidden;
 }
 .program-item.editing {
   background: #f0fdfa;
   border-color: var(--primary);
+  padding-top: 12px;
 }
 .program-text {
   display: flex;
@@ -1138,6 +1140,12 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
+  margin: 0 -14px 8px;
+  padding: 12px 16px;
+  background: var(--primary-dark);
+  color: #fff;
+  letter-spacing: 0.2px;
 }
 .program-desc,
 .program-schedule {
@@ -1574,20 +1582,20 @@ tr.risky td { background: #fff1f2; }
   justify-content: space-between;
   gap: 12px;
   padding: 14px 18px;
-  background: #fff;
-  border: 1px solid var(--border);
+  background: var(--primary-dark);
+  border: 1px solid var(--primary-dark);
   border-radius: 12px;
   cursor: pointer;
   font: inherit;
-  color: var(--text);
+  color: #fff;
   text-align: start;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .program-row:hover,
 .program-row:focus-visible {
   border-color: var(--primary);
-  background: #f2f8f7;
-  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
+  background: var(--primary);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
   outline: none;
 }
 .program-row-main {
@@ -1597,11 +1605,11 @@ tr.risky td { background: #fff1f2; }
 }
 .program-row-main strong {
   font-size: 1.05rem;
-  color: var(--primary-dark);
+  color: #fff;
 }
 .program-row-desc {
   font-size: 0.85rem;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.82);
 }
 .program-row-meta {
   display: inline-flex;
@@ -1611,15 +1619,15 @@ tr.risky td { background: #fff1f2; }
 }
 .program-row-count {
   font-size: 0.8rem;
-  background: #e6f2f0;
-  color: var(--primary-dark);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
   border-radius: 999px;
   padding: 3px 10px;
 }
 .program-row-arrow {
   font-size: 1.4rem;
   line-height: 1;
-  color: var(--primary);
+  color: #fff;
 }
 [dir="ltr"] .program-row-arrow {
   transform: scaleX(-1);
