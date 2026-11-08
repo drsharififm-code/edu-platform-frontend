@@ -80,6 +80,7 @@ const MSG = {
   file_incomplete: ["بيانات الملف غير مكتملة.", "File data is incomplete."],
   file_type: ["الصيغ المسموحة: PDF أو Excel.", "Allowed formats: PDF or Excel."],
   file_size: ["حجم الملف أكبر من 8 ميجابايت.", "The file is larger than 8 MB."],
+  pdf_size: ["حجم ملف PDF أكبر من 20 ميجابايت. قلّل جودة الصور عند الحفظ من PowerPoint ثم أعد المحاولة.", "The PDF is larger than 20 MB. Reduce image quality when saving from PowerPoint and try again."],
   title_required: ["عنوان المحاضرة مطلوب.", "Lecture title is required."],
   url_invalid: ["الرابط غير صالح. يجب أن يبدأ بـ https:// أو http://", "Invalid link. It must start with https:// or http://"],
   lecture_closed: ["انتهت فترة إتاحة هذه المحاضرة.", "This lecture is no longer available."],
@@ -160,9 +161,9 @@ class HttpError extends Error {
   }
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = 12 * 1024 * 1024) {
   const len = Number(request.headers.get("content-length") || 0);
-  if (len > 12 * 1024 * 1024) throw new HttpError(413, "bad_request");
+  if (len > maxBytes) throw new HttpError(413, "bad_request");
   try {
     const body = await request.json();
     return body && typeof body === "object" ? body : null;
@@ -1303,6 +1304,7 @@ function normalizeSlides(slides) {
   if (!list.length) return null;
   return JSON.stringify({
     voice: normalizeVoice(slides.voice),
+    kind: slides.kind === "pdf" ? "pdf" : "text",
     file_name: slides.file_name ? String(slides.file_name).slice(0, 200) : null,
     slides: list.slice(0, 200).map((s) => ({
       title: String(s.title || "").slice(0, 500),
@@ -1341,6 +1343,8 @@ async function lectureForCaller(env, caller, lectureId) {
   return lecture;
 }
 const ownsLecture = (caller, lecture) => caller.role === "admin" || lecture.lecturer_username === caller.username;
+// Trainees and lecturers both attend lectures, take the post-test and earn certificates.
+const isLearner = (caller) => caller.role === "trainee" || caller.role === "lecturer";
 
 function lectureFields(body, existing) {
   const pick = (k, max) => (k in body ? optStr(body[k], max) : existing ? existing[k] : null);
@@ -1444,6 +1448,7 @@ async function handleLecturesDelete(request, env) {
   const { results: qz } = await env.DB.prepare("SELECT id FROM quizzes WHERE lecture_id = ?").bind(id).all();
   for (const q of qz) await env.DB.prepare("DELETE FROM quiz_questions WHERE quiz_id = ?").bind(q.id).run();
   await env.DB.prepare("DELETE FROM quizzes WHERE lecture_id = ?").bind(id).run();
+  await deleteLecturePdf(env, id);
   await env.DB.prepare("DELETE FROM lectures WHERE id = ?").bind(id).run();
   await audit(env, request, caller.username, "lecture_deleted", `${id} ${lecture.title}`);
   return ok();
@@ -1482,7 +1487,7 @@ async function handleSlideProgress(request, env) {
   const body = (await readJson(request)) || {};
   const idx = Number(body.slide_index);
   if (!Number.isInteger(idx) || idx < 0 || idx > 500) return err(400, "slide_invalid");
-  if (caller.role !== "trainee") return ok();
+  if (!isLearner(caller)) return ok();
   const lecture = await lectureForCaller(env, caller, body.id);
   const total = safeParse(lecture.slides_json, null)?.slides?.length || 0;
   if (idx >= total) return err(400, "slide_invalid");
@@ -1509,6 +1514,58 @@ async function contentCompleted(env, lecture, username) {
   return true;
 }
 
+/* ---------------- lecture slides as PDF (shown exactly as designed) ---------------- */
+const LECTURE_PDF_MAX_BYTES = 20 * 1024 * 1024;
+let lecturePdfTablesReady = false;
+async function ensureLecturePdfTables(env) {
+  if (lecturePdfTablesReady) return;
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS lecture_pdfs (lecture_id INTEGER PRIMARY KEY, filename TEXT NOT NULL, size INTEGER, chunks INTEGER NOT NULL, uploaded_at TEXT DEFAULT (datetime('now')))").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS lecture_pdf_chunks (lecture_id INTEGER NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (lecture_id, idx))").run();
+  lecturePdfTablesReady = true;
+}
+async function deleteLecturePdf(env, lectureId) {
+  await ensureLecturePdfTables(env);
+  await env.DB.prepare("DELETE FROM lecture_pdf_chunks WHERE lecture_id = ?").bind(lectureId).run();
+  await env.DB.prepare("DELETE FROM lecture_pdfs WHERE lecture_id = ?").bind(lectureId).run();
+}
+async function handleLecturePdfUpload(request, env) {
+  const caller = await requireUser(request, env, ["lecturer", "admin"]);
+  const body = (await readJson(request, 30 * 1024 * 1024)) || {};
+  const id = intId(body.lecture_id);
+  const filename = str(body.filename, 200).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_");
+  if (!id || !filename || !body.data) return err(400, "file_incomplete");
+  if (!/\.pdf$/i.test(filename)) return err(400, "file_type");
+  const lecture = await env.DB.prepare("SELECT * FROM lectures WHERE id = ?").bind(id).first();
+  if (!lecture) return err(404, "not_found");
+  if (!ownsLecture(caller, lecture)) return err(403, "forbidden");
+  const b64 = String(body.data).replace(/^data:[^,]*,/, "");
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(b64.slice(0, 2000))) return err(400, "file_incomplete");
+  const size = Math.floor((b64.length * 3) / 4);
+  if (size > LECTURE_PDF_MAX_BYTES) return err(400, "pdf_size");
+  const head = fromB64(b64.slice(0, 8).padEnd(8, "="));
+  if (!(head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46)) return err(400, "file_type"); // %PDF
+  await deleteLecturePdf(env, id);
+  const chunks = Math.ceil(b64.length / CHUNK_CHARS);
+  await env.DB.prepare("INSERT INTO lecture_pdfs (lecture_id, filename, size, chunks) VALUES (?, ?, ?, ?)").bind(id, filename, size, chunks).run();
+  for (let i = 0; i < chunks; i++) {
+    await env.DB.prepare("INSERT INTO lecture_pdf_chunks (lecture_id, idx, data) VALUES (?, ?, ?)").bind(id, i, b64.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS)).run();
+  }
+  await audit(env, request, caller.username, "lecture_pdf_uploaded", `${id}`);
+  return ok({ size });
+}
+// Returns the PDF bytes to anyone allowed to see the lecture (signed-in, checked per lecture).
+async function handleLecturePdfGet(request, env) {
+  const caller = await requireUser(request, env);
+  const lecture = await lectureForCaller(env, caller, new URL(request.url).searchParams.get("lecture_id"));
+  await ensureLecturePdfTables(env);
+  const f = await env.DB.prepare("SELECT * FROM lecture_pdfs WHERE lecture_id = ?").bind(lecture.id).first();
+  if (!f) return err(404, "not_found");
+  const { results } = await env.DB.prepare("SELECT data FROM lecture_pdf_chunks WHERE lecture_id = ? ORDER BY idx").bind(lecture.id).all();
+  return new Response(fromB64(results.map((r) => r.data).join("")), {
+    headers: { "Content-Type": "application/pdf", "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff" },
+  });
+}
+
 /* ---------------- quizzes ---------------- */
 
 function cleanQuestions(questions) {
@@ -1526,12 +1583,22 @@ async function handleQuizzesGet(request, env) {
   const lecture = await lectureForCaller(env, caller, new URL(request.url).searchParams.get("lecture_id"));
   const { results: quizzes } = await env.DB.prepare("SELECT * FROM quizzes WHERE lecture_id = ?").bind(lecture.id).all();
   const canSeeAnswers = ownsLecture(caller, lecture);
+  // Learners only receive the questions after completing the whole lecture (or once they have attempted it).
+  let locked = false;
+  if (!canSeeAnswers && isLearner(caller) && quizzes.length) {
+    const attempted = await env.DB.prepare("SELECT 1 FROM quiz_attempts a JOIN quizzes z ON z.id = a.quiz_id WHERE z.lecture_id = ? AND a.username = ? LIMIT 1")
+      .bind(lecture.id, caller.username)
+      .first();
+    if (!attempted && !(await contentCompleted(env, lecture, caller.username))) locked = true;
+  }
   const out = [];
   for (const q of quizzes) {
     const { results: questions } = await env.DB.prepare("SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY order_index").bind(q.id).all();
     out.push({
       ...q,
-      questions: questions.map((qq) => {
+      locked,
+      question_count: questions.length,
+      questions: locked ? [] : questions.map((qq) => {
         const opts = safeParse(qq.options, []);
         return { id: qq.id, question_text: qq.question_text, type: qq.type, options: canSeeAnswers ? opts : opts.map((o) => ({ text: o.text })) };
       }),
@@ -1698,7 +1765,7 @@ async function handleQuizAttempt(request, env) {
   const quiz = await env.DB.prepare("SELECT * FROM quizzes WHERE id = ?").bind(quizId).first();
   if (!quiz) return err(404, "quiz_not_found");
   const lecture = await lectureForCaller(env, caller, quiz.lecture_id);
-  if (caller.role === "trainee") {
+  if (isLearner(caller)) {
     const { results: prev } = await env.DB.prepare("SELECT passed FROM quiz_attempts WHERE quiz_id = ? AND username = ?").bind(quizId, caller.username).all();
     if (prev.some((a) => Number(a.passed) === 1)) return err(403, "quiz_passed");
     if (prev.length >= MAX_QUIZ_ATTEMPTS) return err(403, "quiz_exhausted");
@@ -1724,7 +1791,7 @@ async function handleQuizAttempt(request, env) {
     .bind(quizId, caller.username, score, passed, JSON.stringify(clean))
     .run();
   let certificate = null;
-  if (passed && caller.role === "trainee") {
+  if (passed && isLearner(caller)) {
     certificate = await issueCertificate(env, caller, lecture, ins.meta.last_row_id, score, null);
   }
   return ok({ score, passed: !!passed, correctCount, total: questions.length, certificate });
@@ -1754,7 +1821,7 @@ function rating(v) {
   return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 }
 async function handleFeedbackPost(request, env) {
-  const caller = await requireUser(request, env, ["trainee"]);
+  const caller = await requireUser(request, env, ["trainee", "lecturer"]);
   const body = (await readJson(request)) || {};
   const lecture = await lectureForCaller(env, caller, body.lecture_id);
   const q = await env.DB.prepare("SELECT COUNT(*) AS n FROM quizzes WHERE lecture_id = ?").bind(lecture.id).first();
@@ -2297,6 +2364,8 @@ const ROUTES = {
   "POST /api/activity-schedules": handleActivityScheduleUpload,
   "POST /api/activity-schedules/delete": handleActivityScheduleDelete,
   "GET /api/activity-schedules/file": handleActivityScheduleFile,
+  "POST /api/lectures/pdf": handleLecturePdfUpload,
+  "GET /api/lectures/pdf": handleLecturePdfGet,
   "GET /api/lecturers": handleLecturersGet,
   "GET /api/programs": handleProgramsGet,
   "POST /api/programs": handleProgramsPost,
