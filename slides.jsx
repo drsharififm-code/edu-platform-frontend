@@ -285,12 +285,13 @@ function speakWithBrowser(text, onEnd, voiceId) {
 }
 
 // Renders one page of the lecture PDF exactly as designed (fits the container width).
-function PdfSlideView({ loader, index, total }) {
+function PdfSlideView({ loader, index, total, fit }) {
   const holderRef = useRef(null);
   const canvasRef = useRef(null);
   const [doc, setDoc] = useState(null);
   const [error, setError] = useState("");
   const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -313,7 +314,10 @@ function PdfSlideView({ loader, index, total }) {
   useEffect(() => {
     const el = holderRef.current;
     if (!el) return undefined;
-    const update = () => setWidth(el.clientWidth);
+    const update = () => {
+      setWidth(el.clientWidth);
+      setHeight(el.clientHeight);
+    };
     update();
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(update);
@@ -330,7 +334,7 @@ function PdfSlideView({ loader, index, total }) {
       .then((page) => {
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
-        const scale = width / base.width;
+        const scale = fit && height ? Math.min(width / base.width, height / base.height) : width / base.width;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const viewport = page.getViewport({ scale: scale * dpr });
         const canvas = canvasRef.current;
@@ -349,7 +353,7 @@ function PdfSlideView({ loader, index, total }) {
       cancelled = true;
       if (task) task.cancel();
     };
-  }, [doc, index, width]);
+  }, [doc, index, width, height, fit]);
 
   return (
     <div className="pdf-slide" ref={holderRef}>
@@ -378,6 +382,8 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
   const pendingSecondsRef = useRef(0);
   const tokenRef = useRef(0); // invalidates stale "ended" callbacks
   const [heard, setHeard] = useState(() => new Set());
+  const playerRef = useRef(null);
+  const [fullscreen, setFullscreen] = useState(false); // native or CSS (iPhone has no Fullscreen API for pages)
   const heardRef = useRef(heard);
   useEffect(() => {
     heardRef.current = heard;
@@ -537,6 +543,64 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
     }
   }
 
+  const nativeFsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  useEffect(() => {
+    const onChange = () => {
+      if (!nativeFsElement()) setFullscreen((f) => (f === "native" ? false : f));
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
+  // CSS full screen: lock page scroll, Esc closes.
+  useEffect(() => {
+    if (fullscreen !== "css") return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => e.key === "Escape" && setFullscreen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fullscreen]);
+
+  async function toggleFullscreen() {
+    if (fullscreen === "native") {
+      try {
+        await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } catch (e) {
+        /* ignore */
+      }
+      setFullscreen(false);
+      return;
+    }
+    if (fullscreen === "css") {
+      setFullscreen(false);
+      return;
+    }
+    const el = playerRef.current;
+    const req = el && (el.requestFullscreen || el.webkitRequestFullscreen);
+    if (req) {
+      try {
+        await req.call(el);
+        setFullscreen("native");
+        try {
+          await screen.orientation.lock("landscape");
+        } catch (e) {
+          /* not supported */
+        }
+        return;
+      } catch (e) {
+        /* fall back to CSS */
+      }
+    }
+    setFullscreen("css");
+  }
+
   function goTo(i) {
     if (i < 0 || i >= slides.length) return;
     stopAudio();
@@ -564,9 +628,10 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
   const missing = slides.map((_, i) => i).filter((i) => !heard.has(i));
 
   return (
-    <div className="slide-player">
+    <div ref={playerRef} className={`slide-player${fullscreen ? " is-fullscreen" : ""}`}>
+      <div className="slide-stage-wrap">
       {isPdf ? (
-        <PdfSlideView loader={pdfLoader} index={index} total={slides.length} />
+        <PdfSlideView loader={pdfLoader} index={index} total={slides.length} fit={!!fullscreen} />
       ) : (
       <div className="slide-stage">
         <div className={`slide-card ${rtl ? "rtl" : "ltr"}`} dir={rtl ? "rtl" : "ltr"}>
@@ -584,6 +649,20 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
         </div>
       </div>
       )}
+        <button
+          type="button"
+          className="slide-fs-btn"
+          onClick={toggleFullscreen}
+          aria-label={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
+          title={fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
+        >
+          {fullscreen ? (
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" /></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>
+          )}
+        </button>
+      </div>
       <div className="slide-progress">
         <div className="slide-progress-bar" style={{ width: `${progress}%` }} />
       </div>
