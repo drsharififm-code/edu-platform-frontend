@@ -232,6 +232,33 @@ export const api = {
     }
     return res.blob();
   },
+
+  // Lecture slides as PDF (shown exactly as uploaded).
+  uploadLecturePdf: async (lecture_id, file) => {
+    const data = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = () => reject(new Error('تعذّرت قراءة الملف.'));
+      r.readAsDataURL(file);
+    });
+    return request('/api/lectures/pdf', { method: 'POST', body: { lecture_id, filename: file.name, data } });
+  },
+  getLecturePdf: async (lectureId) => {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/lectures/pdf?lecture_id=${encodeURIComponent(lectureId)}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch (e) {
+      throw apiError({ message: 'تعذّر الاتصال بالخادم.', code: 'network' }, 0);
+    }
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (e) { /* ignore */ }
+      throw apiError(data, res.status);
+    }
+    return res.arrayBuffer();
+  },
 };
 
 export { getToken, API_BASE };
