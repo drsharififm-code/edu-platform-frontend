@@ -342,7 +342,9 @@ function PdfSlideView({ loader, index, total, fit }) {
         canvas.height = Math.floor(viewport.height);
         canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
         canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
-        task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+        const ctx = canvas.getContext("2d");
+        if ("direction" in ctx) ctx.direction = "ltr";
+        task = page.render({ canvasContext: ctx, viewport });
         return task.promise;
       })
       .catch((e) => {
@@ -358,7 +360,7 @@ function PdfSlideView({ loader, index, total, fit }) {
   return (
     <div className="pdf-slide" ref={holderRef}>
       {error ? <div className="error-box">{error}</div> : !doc ? <div className="pdf-slide-loading">⏳ جارِ تحميل الشرائح…</div> : null}
-      <canvas ref={canvasRef} className="pdf-slide-canvas" aria-label={`الشريحة ${index + 1} من ${total}`} />
+      <canvas ref={canvasRef} dir="ltr" className="pdf-slide-canvas" aria-label={`الشريحة ${index + 1} من ${total}`} />
       <div className="slide-number pdf-slide-number" dir="ltr">
         {index + 1} / {total}
       </div>
