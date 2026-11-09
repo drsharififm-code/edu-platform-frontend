@@ -752,6 +752,8 @@ textarea {
   line-height: 0;
 }
 .pdf-slide-canvas {
+  /* pdf.js draws glyph by glyph: an inherited RTL direction shifts every letter */
+  direction: ltr;
   display: block;
   max-width: 100%;
 }
