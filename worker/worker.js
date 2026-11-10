@@ -2254,9 +2254,36 @@ async function handleTts(request, env) {
   }
   return new Response(fromB64(b64), { headers: audioHeaders(false) });
 }
+/* ---------------- app settings (admin switches) ---------------- */
+let appSettingsReady = false;
+async function getSetting(env, key, fallback) {
+  if (!appSettingsReady) {
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now')))").run();
+    appSettingsReady = true;
+  }
+  const row = await env.DB.prepare("SELECT value FROM app_settings WHERE key = ?").bind(key).first();
+  return row ? row.value : fallback;
+}
+// Lecture narration is muted until the admin turns it on (the voice system itself stays in place).
+async function lectureAudioOn(env) {
+  return (await getSetting(env, "lecture_audio", "off")) === "on";
+}
+async function handleAdminSettings(request, env) {
+  const caller = await requireUser(request, env, ["admin"]);
+  const body = (await readJson(request)) || {};
+  if (typeof body.lecture_audio === "boolean") {
+    await getSetting(env, "lecture_audio", "off");
+    await env.DB.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES ('lecture_audio', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+      .bind(body.lecture_audio ? "on" : "off")
+      .run();
+    await audit(env, request, caller.username, "lecture_audio", body.lecture_audio ? "on" : "off");
+  }
+  return ok({ lecture_audio: await lectureAudioOn(env) });
+}
+
 async function handleTtsStatus(env) {
   const provider = ttsProvider(env);
-  return ok({ enabled: !!provider, provider, tier: provider === "google" ? (env.GOOGLE_TTS_TIER === "chirp" ? "chirp" : "wavenet") : null, voices: TTS_VOICES });
+  return ok({ lecture_audio: await lectureAudioOn(env), enabled: !!provider, provider, tier: provider === "google" ? (env.GOOGLE_TTS_TIER === "chirp" ? "chirp" : "wavenet") : null, voices: TTS_VOICES });
 }
 
 /* ---------------- backups (monthly cron + manual download) ---------------- */
@@ -2355,6 +2382,7 @@ const ROUTES = {
   "GET /api/admin/audit": handleAudit,
   "GET /api/admin/certificates": handleAdminCertificates,
   "POST /api/admin/certificates/revoke": handleAdminCertificateRevoke,
+  "POST /api/admin/settings": handleAdminSettings,
   "GET /api/certificates/mine": handleMyCertificates,
   "GET /api/certificates/verify": handleCertificateVerify,
   "POST /api/programs/schedule": handleScheduleUpload,
