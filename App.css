@@ -1713,3 +1713,16 @@ tr.risky td { background: #fff1f2; }
 .program-head {
   justify-content: space-between;
 }
+
+/* Admin: lecture audio on/off */
+.audio-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 0.9rem;
+}
