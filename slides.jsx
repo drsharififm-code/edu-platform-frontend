@@ -368,6 +368,24 @@ function PdfSlideView({ loader, index, total, fit }) {
   );
 }
 
+// Whether lecture narration is switched on by the admin (cached for the session; muted if unknown).
+let audioStatusPromise = null;
+export function lectureAudioStatus(refresh = false) {
+  if (!audioStatusPromise || refresh) {
+    audioStatusPromise = api
+      .ttsStatus()
+      .then((d) => d.lecture_audio === true)
+      .catch(() => false);
+  }
+  return audioStatusPromise;
+}
+
+// Silent mode: each slide stays on screen for a reading time based on its text.
+function readingMs(text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  return Math.min(40, Math.max(6, Math.round(words / 2.5))) * 1000;
+}
+
 export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader }) {
   const slides = deck?.slides || [];
   const voice = normalizeVoice(deck?.voice);
@@ -375,6 +393,14 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
   const [playing, setPlaying] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [mode, setMode] = useState("ai"); // ai | browser
+  const [audioOn, setAudioOn] = useState(null); // null while checking
+  useEffect(() => {
+    let alive = true;
+    lectureAudioStatus().then((on) => alive && setAudioOn(on));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [error, setError] = useState("");
   const [finished, setFinished] = useState(false);
   const audioRef = useRef(null);
@@ -476,6 +502,10 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
       const onEnd = () => {
         if (token === tokenRef.current) handleSlideEnded();
       };
+      if (!audioOn) {
+        setTimeout(onEnd, readingMs(text));
+        return;
+      }
       if (!text.trim()) {
         setTimeout(onEnd, 1500);
         return;
@@ -517,7 +547,7 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
         setLoadingAudio(false);
       }
     },
-    [slides, mode, voice, getAudioUrl, handleSlideEnded],
+    [slides, mode, voice, getAudioUrl, handleSlideEnded, audioOn],
   );
 
   // When index changes while playing, narrate the new slide
@@ -673,7 +703,17 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
           ▶ السابقة
         </button>
         <button className="btn btn-primary slide-play" onClick={togglePlay}>
-          {loadingAudio ? "⏳ جارِ تجهيز الصوت…" : playing ? "⏸ إيقاف مؤقت" : index === 0 && !finished ? "🔊 تشغيل العرض الصوتي" : "🔊 متابعة"}
+          {loadingAudio
+            ? "⏳ جارِ تجهيز الصوت…"
+            : playing
+              ? "⏸ إيقاف مؤقت"
+              : !audioOn
+                ? index === 0 && !finished
+                  ? "▶ تشغيل العرض"
+                  : "▶ متابعة"
+                : index === 0 && !finished
+                  ? "🔊 تشغيل العرض الصوتي"
+                  : "🔊 متابعة"}
         </button>
         <button
           className="btn btn-small"
@@ -686,17 +726,20 @@ export function SlidePlayer({ deck, lectureId, trackTime, onComplete, pdfLoader 
       </div>
       {trackTime && (
         <p className="hint slide-heard">
-          🎧 استمعت إلى {heard.size} من {slides.length} شريحة (
+          {audioOn ? "🎧 استمعت إلى" : "👁 شاهدت"} {heard.size} من {slides.length} شريحة (
           {Math.round((heard.size / slides.length) * 100)}٪)
         </p>
       )}
-      {mode === "browser" && (
+      {audioOn === false && (
+        <p className="hint">🔇 الصوت متوقف حالياً — تنتقل الشرائح تلقائياً بعد مدة القراءة، ويمكنك التنقل بينها يدوياً.</p>
+      )}
+      {audioOn && mode === "browser" && (
         <p className="hint">يتم استخدام صوت المتصفح حالياً لأن خدمة الصوت الاحترافي (Google) غير مفعّلة بعد.</p>
       )}
       {error && <div className="error-box">{error}</div>}
       {trackTime && finished && missing.length > 0 && (
         <div className="feedback-locked">
-          ⚠️ لم تكتمل المحاضرة بعد: بقيت {missing.length} شريحة لم تستمع إليها كاملة. يُفتح الاختبار البعدي بعد الاستماع لجميع الشرائح.{" "}
+          ⚠️ لم تكتمل المحاضرة بعد: بقيت {missing.length} شريحة لم {audioOn ? "تستمع إليها" : "تُعرض"} كاملة. يُفتح الاختبار البعدي بعد إكمال جميع الشرائح.{" "}
           <button className="btn btn-small" onClick={() => goTo(missing[0])}>
             الانتقال إلى الشريحة {missing[0] + 1}
           </button>
