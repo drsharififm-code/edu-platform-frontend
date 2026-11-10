@@ -210,6 +210,7 @@ export const api = {
   },
 
   ttsStatus: () => request('/api/tts/status', { auth: false }),
+  setAdminSettings: (body) => request('/api/admin/settings', { method: 'POST', body }),
   // Returns an audio Blob, or throws an Error with .code === 'tts_disabled'.
   // Trainees send the lecture id + slide index; the server reads the slide text itself.
   tts: async (text, voice, ctx = {}) => {
