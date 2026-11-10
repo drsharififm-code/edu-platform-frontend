@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api, setToken, getToken, API_BASE } from "./api.js";
 import { getLang, setLang, dateLocale } from "./i18n.js";
-import { SlidePlayer, VOICE_OPTIONS, defaultNarration, normalizeVoice } from "./slides.jsx";
+import { SlidePlayer, VOICE_OPTIONS, defaultNarration, normalizeVoice, lectureAudioStatus } from "./slides.jsx";
 import { extractPdfSlides } from "./pdfdeck.js";
 import { tr, Turnstile, turnstileEnabled, PasswordRules, passwordOk, MfaStep, CertificateCard, VerifyPage, CertificatesPortal, AuditLog, safeHref } from "./secure.jsx";
 
@@ -251,7 +251,9 @@ function ActivitySchedulePanel({ isAdmin }) {
     };
   }, []);
 
-  const years = Array.from(new Set([thisYear - 1, thisYear, thisYear + 1, thisYear + 2, ...schedules.map((s) => s.year)])).sort();
+  const years = Array.from(
+    new Set([thisYear - 1, ...Array.from({ length: Math.max(2030, thisYear) - thisYear + 1 }, (_, i) => thisYear + i), ...schedules.map((s) => s.year)]),
+  ).sort();
   const current = schedules.find((s) => s.year === Number(year));
 
   async function upload(e) {
@@ -403,7 +405,7 @@ function PersonalReport({ isAdmin }) {
   }, [data]);
 
   const years = [];
-  for (let y = thisYear; y >= thisYear - 4; y--) years.push(y);
+  for (let y = Math.max(2030, thisYear); y >= Math.min(2022, thisYear - 4); y--) years.push(y);
 
   return (
     <div className="personal-report">
@@ -3548,6 +3550,40 @@ function ProgramsManagement() {
   );
 }
 
+// Admin switch: lecture narration on/off (the voice system stays installed).
+function LectureAudioSwitch() {
+  const [on, setOn] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    lectureAudioStatus(true).then(setOn);
+  }, []);
+  async function toggle() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await api.setAdminSettings({ lecture_audio: !on });
+      setOn(res.lecture_audio === true);
+      lectureAudioStatus(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="audio-switch">
+      <span>
+        {on === null ? "…" : on ? "🔊 صوت المحاضرات: مفعّل" : "🔇 صوت المحاضرات: متوقف"}
+      </span>
+      <button type="button" className={`btn btn-small ${on ? "" : "btn-primary"}`} disabled={busy || on === null} onClick={toggle}>
+        {busy ? "…" : on ? "إيقاف الصوت" : "تفعيل الصوت"}
+      </button>
+      {error && <span className="error-text">{error}</span>}
+    </div>
+  );
+}
+
 function LecturesModeration({ user, onOpen }) {
   const [programs, setPrograms] = useState([]);
   const [lectures, setLectures] = useState([]);
@@ -3617,6 +3653,7 @@ function LecturesModeration({ user, onOpen }) {
         >
           + إضافة محاضرة
         </button>
+        <LectureAudioSwitch />
       </div>
       {loading && <Spinner />}
       <ErrorBox message={error} />
