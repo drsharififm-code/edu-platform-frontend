@@ -1981,7 +1981,66 @@ function certOut(c, full) {
     const emp = String(c.employee_id || "");
     return { ...base, employee_id_masked: emp ? "•".repeat(Math.max(0, emp.length - 3)) + emp.slice(-3) : null };
   }
-  return { ...base, username: c.username, employee_id: c.employee_id, hospital: c.hospital, score: c.score, lecture_id: c.lecture_id, revoked_by: c.revoked_by, revoked_reason: c.revoked_reason };
+  return { ...base, username: c.username, employee_id: c.employee_id, hospital: c.hospital, score: c.score, lecture_id: c.lecture_id, revoked_by: c.revoked_by, revoked_reason: c.revoked_reason, emailed_at: c.emailed_at || null };
+}
+
+/* ---- certificate by e-mail (PDF made on the trainee's device, details & verify link from the server) ---- */
+let certEmailColumnReady = false;
+async function ensureCertEmailColumn(env) {
+  if (certEmailColumnReady) return;
+  try {
+    await env.DB.prepare("ALTER TABLE certificates ADD COLUMN emailed_at TEXT").run();
+  } catch (e) {
+    /* column already exists */
+  }
+  certEmailColumnReady = true;
+}
+function certificateEmailHtml(c) {
+  const verify = `${SITE_URL}/?verify=${encodeURIComponent(c.code)}`;
+  const row = (k, v) => `<tr><td style="padding:8px 12px;color:#475569;border-bottom:1px solid #e2e8f0;white-space:nowrap">${k}</td><td style="padding:8px 12px;color:#0f172a;font-weight:bold;border-bottom:1px solid #e2e8f0">${v}</td></tr>`;
+  return `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;background:#f4f7f6;padding:24px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+<div style="background:#115e59;color:#fff;padding:18px 20px;font-size:18px;font-weight:bold">🎓 شهادة حضور</div>
+<div style="padding:20px;line-height:1.8;color:#1f2937">
+<p>مرحباً ${escapeHtml(c.holder_name)}،</p>
+<p>تهانينا على اجتياز الاختبار البعدي. مرفق شهادة الحضور بصيغة PDF.</p>
+<table style="width:100%;border-collapse:collapse;font-size:14px;margin:12px 0">
+${row("المحاضرة", escapeHtml(c.lecture_title))}
+${c.program_name ? row("البرنامج التدريبي", escapeHtml(c.program_name)) : ""}
+${c.lecturer_name ? row("المحاضر", escapeHtml(c.lecturer_name)) : ""}
+${row("رقم الشهادة", `<span dir="ltr" style="font-family:monospace">${escapeHtml(c.code)}</span>`)}
+${row("سارية من", `<span dir="ltr">${escapeHtml(c.valid_from)}</span>`)}
+${row("سارية حتى", `<span dir="ltr">${escapeHtml(c.valid_until)}</span>`)}
+</table>
+<p style="text-align:center;margin:20px 0"><a href="${verify}" style="background:#0f766e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block">🔎 التحقق من الشهادة</a></p>
+<p style="font-size:12px;color:#64748b">يمكنك أيضاً تحميل الشهادة في أي وقت من صفحة المحاضرة في <a href="${SITE_URL}">${SITE_URL.replace("https://", "")}</a>.</p>
+</div></div>
+<p style="text-align:center;font-size:11px;color:#94a3b8">منصة التطوير المهني المستمر بالرعاية الأولية</p></div>`;
+}
+async function handleCertificateEmail(request, env) {
+  const caller = await requireUser(request, env);
+  const body = (await readJson(request, 6 * 1024 * 1024)) || {};
+  const code = normCertCode(body.code);
+  if (!code) return err(400, "cert_not_found");
+  await ensureCertEmailColumn(env);
+  const c = await env.DB.prepare("SELECT * FROM certificates WHERE code = ? AND username = ?").bind(code, caller.username).first();
+  if (!c) return err(404, "cert_not_found");
+  if (!caller.email) return err(400, "no_email");
+  if (!env.RESEND_API_KEY) return err(503, "mail_disabled");
+  if (body.auto && c.emailed_at) return ok({ sent: false, already: true, email: caller.email });
+  await limitOrThrow(env, `certmail:${caller.username}`, 10, 86400);
+  let attachments;
+  const b64 = typeof body.pdf === "string" ? body.pdf.replace(/^data:[^,]*,/, "") : "";
+  if (b64) {
+    const head = fromB64(b64.slice(0, 8).padEnd(8, "="));
+    if (b64.length > 5 * 1024 * 1024 || !(head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46)) return err(400, "file_type");
+    attachments = [{ filename: `certificate-${c.code}.pdf`, content: b64 }];
+  }
+  const sent = await sendMail(env, { to: caller.email, subject: `شهادة حضور: ${c.lecture_title}`, html: certificateEmailHtml(c), attachments });
+  if (!sent) return err(502, "mail_failed");
+  await env.DB.prepare("UPDATE certificates SET emailed_at = datetime('now') WHERE code = ?").bind(c.code).run();
+  await audit(env, request, caller.username, "certificate_emailed", c.code);
+  return ok({ sent: true, email: caller.email });
 }
 
 async function issueCertificate(env, user, lecture, attemptId, score, issuedAtDb) {
@@ -2384,6 +2443,7 @@ const ROUTES = {
   "POST /api/admin/certificates/revoke": handleAdminCertificateRevoke,
   "POST /api/admin/settings": handleAdminSettings,
   "GET /api/certificates/mine": handleMyCertificates,
+  "POST /api/certificates/email": handleCertificateEmail,
   "GET /api/certificates/verify": handleCertificateVerify,
   "POST /api/programs/schedule": handleScheduleUpload,
   "POST /api/programs/schedule/delete": handleScheduleDelete,
