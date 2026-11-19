@@ -502,11 +502,33 @@ function jpegToPdf(jpegBytes, imgW, imgH) {
   return new Blob([out], { type: "application/pdf" });
 }
 
-export async function downloadCertificatePdf(cert, { logo } = {}) {
+export async function certificatePdfBlob(cert, { logo } = {}) {
   const canvas = await renderCertificateCanvas(cert, { logo });
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92));
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  const pdf = jpegToPdf(bytes, canvas.width, canvas.height);
+  return jpegToPdf(bytes, canvas.width, canvas.height);
+}
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(new Error("read_failed"));
+    r.readAsDataURL(blob);
+  });
+}
+// Sends the certificate (PDF attached) to the trainee's e-mail; auto = only if never sent before.
+export async function emailCertificate(cert, { logo, auto = false } = {}) {
+  let pdf = "";
+  try {
+    pdf = await blobToBase64(await certificatePdfBlob(cert, { logo }));
+  } catch (e) {
+    pdf = ""; // the e-mail still carries the details and the verification link
+  }
+  return api.emailCertificate({ code: cert.code, pdf, auto });
+}
+
+export async function downloadCertificatePdf(cert, { logo } = {}) {
+  const pdf = await certificatePdfBlob(cert, { logo });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(pdf);
   a.download = `certificate-${cert.code}.pdf`;
@@ -524,6 +546,8 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
   const [cert, setCert] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [mail, setMail] = useState({ state: "", text: "" }); // sending | sent | error
+  const autoTried = useRef("");
   useEffect(() => {
     let alive = true;
     api
@@ -534,7 +558,31 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
       alive = false;
     };
   }, [lectureId, refreshKey]);
+  // Send the certificate by e-mail automatically the first time it appears.
+  useEffect(() => {
+    if (!cert || cert.emailed_at || cert.status !== "valid" || autoTried.current === cert.code) return;
+    autoTried.current = cert.code;
+    setMail({ state: "sending", text: "" });
+    emailCertificate(cert, { logo, auto: true })
+      .then((r) =>
+        setMail(
+          r.sent
+            ? { state: "sent", text: tr(`📧 أُرسلت الشهادة إلى بريدك ${r.email}`, `📧 The certificate was sent to ${r.email}`) }
+            : { state: "", text: "" },
+        ),
+      )
+      .catch(() => setMail({ state: "", text: "" }));
+  }, [cert, logo]);
   if (!cert && !error) return null;
+  async function sendMail() {
+    setMail({ state: "sending", text: "" });
+    try {
+      const r = await emailCertificate(cert, { logo });
+      setMail({ state: "sent", text: tr(`📧 أُرسلت الشهادة إلى بريدك ${r.email}`, `📧 The certificate was sent to ${r.email}`) });
+    } catch (e) {
+      setMail({ state: "error", text: e.message });
+    }
+  }
   async function download() {
     setBusy(true);
     setError("");
@@ -563,6 +611,10 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
           <button className="btn btn-primary" disabled={busy} onClick={download}>
             {busy ? "…" : `⬇ ${tr("تحميل الشهادة PDF", "Download certificate (PDF)")}`}
           </button>
+          <button className="btn btn-small" disabled={mail.state === "sending"} onClick={sendMail}>
+            {mail.state === "sending" ? tr("⏳ جارِ الإرسال…", "⏳ Sending…") : `📧 ${tr("إرسال الشهادة إلى بريدي", "Email me the certificate")}`}
+          </button>
+          {mail.text && <span className={mail.state === "error" ? "error-text" : "success-text"}>{mail.text}</span>}
         </div>
       )}
     </div>
