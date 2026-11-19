@@ -1579,6 +1579,7 @@ textarea {
 .mfa-status { margin: 0 0 12px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .certificate-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .error-text { color: #b91c1c; font-size: 13px; }
+.success-text { color: #15803d; font-size: 13px; flex-basis: 100%; }
 .verify-card { max-width: 560px; }
 .verify-result { margin-top: 14px; border-radius: 12px; padding: 14px 16px; border: 2px solid #e2e8f0; }
 .verify-result.valid { border-color: #16a34a; background: #f0fdf4; }
