@@ -178,6 +178,7 @@ export const api = {
   getFeedback: (lectureId) => request(`/api/feedback?lecture_id=${encodeURIComponent(lectureId)}`),
 
   getMyCertificates: () => request('/api/certificates/mine'),
+  emailCertificate: (body) => request('/api/certificates/email', { method: 'POST', body }),
   verifyCertificate: (code) => request(`/api/certificates/verify?code=${encodeURIComponent(code)}`, { auth: false }),
   adminCertificates: ({ q, status } = {}) => {
     const qs = new URLSearchParams();
