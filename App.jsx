@@ -675,7 +675,7 @@ function AuthPage({ onLoggedIn, onVerify }) {
   };
 
   const [loginForm, setLoginForm] = useState({
-    username: "",
+    email: "",
     password: "",
     keepSignedIn: false,
   });
@@ -684,8 +684,6 @@ function AuthPage({ onLoggedIn, onVerify }) {
     last_name: "",
     employee_id: "",
     email: "",
-    hospital: "",
-    username: "",
     password: "",
     specialty: "",
     job_title: "",
@@ -750,11 +748,8 @@ function AuthPage({ onLoggedIn, onVerify }) {
       setError("الرجاء إدخال الاسم الأول واسم العائلة على الأقل.");
       return;
     }
-    if (!/^[A-Za-z0-9._-]{3,32}$/.test(signupForm.username.trim())) {
-      setError(tr("اسم المستخدم يجب أن يكون من 3 إلى 32 حرفاً إنجليزياً أو رقماً (يسمح بـ . _ -).", "The username must be 3–32 English letters or digits (. _ - allowed)."));
-      return;
-    }
-    if (!passwordOk(signupForm.password, signupForm.username)) {
+    const emailName = signupForm.email.trim().split("@")[0];
+    if (!passwordOk(signupForm.password, emailName)) {
       setError(tr("كلمة المرور لا تستوفي شروط الأمان الموضحة أسفل الحقل.", "The password does not meet the security rules shown below the field."));
       return;
     }
@@ -763,14 +758,14 @@ function AuthPage({ onLoggedIn, onVerify }) {
     try {
       const data = await api.signup({
         ...signupForm,
-        username: signupForm.username.trim(),
+        email: signupForm.email.trim(),
         first_name: fn,
         last_name: ln,
         cf_turnstile: captcha,
       });
       setSuccess(data.message);
       setMode("login");
-      setLoginForm((f) => ({ ...f, username: signupForm.username.trim() }));
+      setLoginForm((f) => ({ ...f, email: signupForm.email.trim() }));
       setSignupForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       setError(err.message);
@@ -819,15 +814,18 @@ function AuthPage({ onLoggedIn, onVerify }) {
         {mode === "login" ? (
           <form onSubmit={handleLogin} className="form">
             <label>
-              اسم المستخدم
+              البريد الإلكتروني
               <input
                 required
                 dir="ltr"
-                maxLength={64}
+                type="email"
+                inputMode="email"
+                maxLength={254}
                 autoComplete="username"
                 autoCapitalize="none"
-                value={loginForm.username}
-                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                placeholder="name@example.com"
+                value={loginForm.email}
+                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
               />
             </label>
             <label>
@@ -861,11 +859,11 @@ function AuthPage({ onLoggedIn, onVerify }) {
         ) : mode === "forgot" ? (
           <form onSubmit={handleForgot} className="form">
             <p className="hint">
-              أدخل اسم المستخدم أو البريد الإلكتروني المسجل، وسنرسل لك رابطاً لتعيين كلمة مرور جديدة.
+              أدخل بريدك الإلكتروني المسجل، وسنرسل لك رابطاً لتعيين كلمة مرور جديدة.
             </p>
             <label>
-              اسم المستخدم أو البريد الإلكتروني
-              <input required dir="ltr" maxLength={254} autoCapitalize="none" value={forgotId} onChange={(e) => setForgotId(e.target.value)} />
+              البريد الإلكتروني
+              <input required dir="ltr" type="email" maxLength={254} autoCapitalize="none" value={forgotId} onChange={(e) => setForgotId(e.target.value)} />
             </label>
             <Turnstile key="t-forgot" onToken={setCaptcha} resetKey={captchaReset} />
             <button className="btn btn-primary" disabled={loading} type="submit">
@@ -895,28 +893,14 @@ function AuthPage({ onLoggedIn, onVerify }) {
               البريد الإلكتروني *
               <input required type="email" dir="ltr" maxLength={254} autoComplete="email" placeholder="name@example.com" value={signupForm.email} onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })} />
             </label>
-            <label>
-              اسم المستشفى / المنشأة *
-              <input required maxLength={150} value={signupForm.hospital} onChange={(e) => setSignupForm({ ...signupForm, hospital: e.target.value })} />
-            </label>
-            <label>
-              اسم المستخدم *
-              <input
-                required
-                dir="ltr"
-                maxLength={32}
-                pattern="[A-Za-z0-9._\-]{3,32}"
-                autoComplete="username"
-                autoCapitalize="none"
-                value={signupForm.username}
-                onChange={(e) => setSignupForm({ ...signupForm, username: e.target.value })}
-              />
-            </label>
+            <p className="hint">
+              {tr("المستشفى: مستشفى القوات المسلحة بالجنوب — ستسجّل الدخول ببريدك الإلكتروني وكلمة المرور.", "Hospital: Armed Forces Hospital – Southern Region. You will sign in with your e-mail and password.")}
+            </p>
             <label>
               كلمة المرور *
               <PasswordInput required autoComplete="new-password" value={signupForm.password} onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })} />
             </label>
-            <PasswordRules password={signupForm.password} username={signupForm.username} />
+            <PasswordRules password={signupForm.password} username={signupForm.email.trim().split("@")[0]} />
             <div className="form-row-2">
               <label>
                 التخصص
@@ -929,9 +913,6 @@ function AuthPage({ onLoggedIn, onVerify }) {
             </div>
             <p className="hint">
               سيتم إنشاء حسابك كمتدرب، وينتظر موافقة المشرف قبل تفعيله.
-            </p>
-            <p className="hint">
-              {tr("عند أول دخول سيُطلب منك ربط تطبيق مصادقة على هاتفك (Google أو Microsoft Authenticator).", "At first sign-in you will be asked to link an authenticator app on your phone (Google or Microsoft Authenticator).")}
             </p>
             <Turnstile key="t-signup" onToken={setCaptcha} resetKey={captchaReset} />
             <button className="btn btn-primary" disabled={loading} type="submit">
@@ -953,7 +934,6 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
     new_password: "",
     employee_id: user.employee_id || "",
     email: user.email || "",
-    hospital: user.hospital || "",
     department: user.department || "",
     specialty: user.specialty || "",
     job_title: user.job_title || "",
@@ -1031,8 +1011,8 @@ function ProfilePage({ user, onUpdated, mustComplete = false }) {
           <input type="email" dir="ltr" required maxLength={254} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
         <label>
-          اسم المستشفى / المنشأة
-          <input maxLength={150} value={form.hospital} onChange={(e) => setForm({ ...form, hospital: e.target.value })} />
+          المستشفى
+          <input value={user.hospital || "مستشفى القوات المسلحة بالجنوب"} readOnly disabled />
         </label>
         <label>
           القسم / الجهة
