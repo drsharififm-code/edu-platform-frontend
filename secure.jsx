@@ -359,13 +359,15 @@ export async function renderCertificateCanvas(cert, { logo, lang = getLang() } =
   ctx.fillStyle = "#0f766e";
   ctx.font = F(800, 112);
   ctx.fillText(en ? "Certificate of Attendance" : "شهادة حضور", cx, 495);
-  ctx.fillStyle = "#64748b";
-  ctx.font = F(500, 40);
-  ctx.fillText(en ? "شهادة حضور" : "CERTIFICATE OF ATTENDANCE", cx, 560);
-
   ctx.fillStyle = "#1f2937";
   ctx.font = F(400, 46);
-  ctx.fillText(en ? "This is to certify that" : `تشهد ${PLATFORM_AR} بأن`, cx, 655);
+  ctx.fillText(
+    en
+      ? "The Department of Family and Community Medicine, Armed Forces Hospital – Southern Region certifies that"
+      : "تشهد إدارة طب الأسرة والمجتمع بمستشفى القوات المسلحة بالجنوب بأن",
+    cx,
+    630,
+  );
   ctx.fillStyle = "#111827";
   ctx.font = F(800, 90);
   ctx.direction = /[؀-ۿ]/.test(cert.holder_name) ? "rtl" : "ltr";
@@ -401,20 +403,6 @@ export async function renderCertificateCanvas(cert, { logo, lang = getLang() } =
     ctx.fillText(`${en ? "Training program" : "البرنامج التدريبي"}: ${cert.program_name}`, cx, y + 5);
     y += 60;
   }
-  // score pill
-  const pill = en ? `and passed the post-test with a score of ${cert.score}%` : `واجتاز/ت الاختبار البعدي بنسبة ${cert.score}%`;
-  ctx.font = F(700, 40);
-  const pw = ctx.measureText(pill).width + 90;
-  ctx.fillStyle = "#f0fdfa";
-  ctx.strokeStyle = "#99c9c2";
-  ctx.lineWidth = 3;
-  const py = y + 10;
-  ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(cx - pw / 2, py, pw, 76, 38) : ctx.rect(cx - pw / 2, py, pw, 76);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#0f766e";
-  ctx.fillText(pill, cx, py + 52);
 
   // footer: QR (left), validity (centre), issue / number (right)
   const qrSize = 300;
