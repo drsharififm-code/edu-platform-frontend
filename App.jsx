@@ -823,7 +823,7 @@ function AuthPage({ onLoggedIn, onVerify }) {
                 maxLength={254}
                 autoComplete="username"
                 autoCapitalize="none"
-                placeholder="name@example.com"
+                placeholder={tr("أدخل إيميلك هنا", "Enter your email")}
                 value={loginForm.email}
                 onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
               />
@@ -851,9 +851,6 @@ function AuthPage({ onLoggedIn, onVerify }) {
             </button>
             <button type="button" className="link-btn" onClick={() => switchMode("forgot")}>
               نسيت كلمة المرور؟
-            </button>
-            <button type="button" className="link-btn" onClick={onVerify}>
-              🔎 {tr("التحقق من شهادة حضور", "Verify an attendance certificate")}
             </button>
           </form>
         ) : mode === "forgot" ? (
