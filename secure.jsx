@@ -397,6 +397,11 @@ export async function renderCertificateCanvas(cert, { logo, lang = getLang() } =
   lines.forEach((l, i) => ctx.fillText(l, cx, 1040 + i * 72));
   ctx.direction = en ? "ltr" : "rtl";
   let y = 1040 + lines.length * 72;
+  // attendance date (the day the lecture was completed and the certificate issued, Saudi time)
+  ctx.fillStyle = "#1f2937";
+  ctx.font = F(500, 42);
+  ctx.fillText(`${en ? "on" : "بتاريخ"} \u2066${fmtYmd(cert.valid_from)}\u2069`, cx, y + 8);
+  y += 66;
   if (cert.program_name) {
     ctx.fillStyle = "#475569";
     ctx.font = F(500, 38);
