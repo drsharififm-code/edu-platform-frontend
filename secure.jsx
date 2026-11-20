@@ -103,8 +103,8 @@ const RULES = [
   {
     id: "username",
     test: (p, u) => !u || u.length < 3 || !p.toLowerCase().includes(u.toLowerCase()),
-    ar: "لا تحتوي على اسم المستخدم",
-    en: "Does not contain the username",
+    ar: "لا تحتوي على الجزء الأول من بريدك الإلكتروني",
+    en: "Does not contain the first part of your e-mail",
   },
 ];
 export function passwordOk(p, username) {
@@ -548,6 +548,13 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
   const [error, setError] = useState("");
   const [mail, setMail] = useState({ state: "", text: "" }); // sending | sent | error
   const autoTried = useRef("");
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
     api
@@ -558,20 +565,26 @@ export function CertificateCard({ lectureId, refreshKey, logo }) {
       alive = false;
     };
   }, [lectureId, refreshKey]);
-  // Send the certificate by e-mail automatically the first time it appears.
+  // Send the certificate by e-mail automatically the first time it is shown (one retry on a passing error).
   useEffect(() => {
-    if (!cert || cert.emailed_at || cert.status !== "valid" || autoTried.current === cert.code) return;
+    if (!cert || cert.status !== "valid" || autoTried.current === cert.code) return;
     autoTried.current = cert.code;
+    if (cert.emailed_at) {
+      setMail({ state: "sent", text: tr("📧 أُرسلت هذه الشهادة إلى بريدك الإلكتروني.", "📧 This certificate was sent to your e-mail.") });
+      return;
+    }
+    const alive = () => mounted.current;
+    const sentText = (r) => tr(`📧 أُرسلت الشهادة إلى بريدك ${r.email}`, `📧 The certificate was sent to ${r.email}`);
+    const attempt = (retry) =>
+      emailCertificate(cert, { logo, auto: true })
+        .then((r) => alive() && setMail({ state: "sent", text: r.sent ? sentText(r) : tr("📧 أُرسلت هذه الشهادة إلى بريدك الإلكتروني.", "📧 This certificate was sent to your e-mail.") }))
+        .catch((e) => {
+          if (!alive()) return;
+          if (retry && (e.status === 0 || e.status >= 500)) setTimeout(() => alive() && attempt(false), 5000);
+          else setMail({ state: "error", text: e.message });
+        });
     setMail({ state: "sending", text: "" });
-    emailCertificate(cert, { logo, auto: true })
-      .then((r) =>
-        setMail(
-          r.sent
-            ? { state: "sent", text: tr(`📧 أُرسلت الشهادة إلى بريدك ${r.email}`, `📧 The certificate was sent to ${r.email}`) }
-            : { state: "", text: "" },
-        ),
-      )
-      .catch(() => setMail({ state: "", text: "" }));
+    attempt(true);
   }, [cert, logo]);
   if (!cert && !error) return null;
   async function sendMail() {
