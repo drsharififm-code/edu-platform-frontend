@@ -402,12 +402,6 @@ export async function renderCertificateCanvas(cert, { logo, lang = getLang() } =
   ctx.font = F(500, 42);
   ctx.fillText(`${en ? "on" : "بتاريخ"} \u2066${fmtYmd(cert.valid_from)}\u2069`, cx, y + 8);
   y += 66;
-  if (cert.program_name) {
-    ctx.fillStyle = "#475569";
-    ctx.font = F(500, 38);
-    ctx.fillText(`${en ? "Training program" : "البرنامج التدريبي"}: ${cert.program_name}`, cx, y + 5);
-    y += 60;
-  }
 
   // footer: QR (left), validity (centre), issue / number (right)
   const qrSize = 300;
