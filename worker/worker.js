@@ -12,6 +12,8 @@
 
 const ALLOWED_ORIGINS = ["https://fcmedu.com", "https://www.fcmedu.com", "https://edu.sharififcm.com", "https://edu-platform-frontend-bxa.pages.dev"];
 const SITE_URL = "https://fcmedu.com";
+// One hospital for every account on the platform.
+const DEFAULT_HOSPITAL = "مستشفى القوات المسلحة بالجنوب";
 const ITERATIONS = 100000; // Workers WebCrypto maximum for PBKDF2
 const SESSION_HOURS_SHORT = 12;
 const SESSION_DAYS_LONG = 7;
@@ -46,12 +48,12 @@ const MSG = {
   not_configured: ["المنصة قيد الإعداد الأمني حالياً. حاول لاحقاً أو تواصل مع المشرف.", "The platform's security setup is not complete yet. Please try later or contact the administrator."],
   captcha_failed: ["تعذّر التحقق من أنك لست برنامجاً آلياً. أعد المحاولة.", "Human verification failed. Please try again."],
   captcha_required: ["الرجاء إكمال التحقق البشري (أنا لست روبوتاً).", "Please complete the human verification check."],
-  invalid_credentials: ["اسم المستخدم أو كلمة المرور غير صحيحة.", "Incorrect username or password."],
+  invalid_credentials: ["البريد الإلكتروني أو كلمة المرور غير صحيحة.", "Incorrect e-mail or password."],
   locked: ["تم إيقاف الدخول مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد 15 دقيقة.", "Sign-in is temporarily blocked after repeated failed attempts. Try again in 15 minutes."],
   account_pending: ["حسابك بانتظار موافقة المشرف.", "Your account is awaiting administrator approval."],
   account_rejected: ["تم رفض طلب تسجيلك. تواصل مع المشرف.", "Your registration was rejected. Please contact the administrator."],
   password_payload: ["انتهت صلاحية بيانات الدخول المشفّرة. حدّث الصفحة وحاول مرة أخرى.", "The encrypted sign-in data has expired. Refresh the page and try again."],
-  weak_password: ["كلمة المرور لا تستوفي شروط الأمان: 10 أحرف على الأقل، حرف كبير وحرف صغير ورقم ورمز خاص، وألا تحتوي اسم المستخدم.", "The password does not meet the security rules: at least 10 characters, with an uppercase letter, a lowercase letter, a number and a special character, and it must not contain the username."],
+  weak_password: ["كلمة المرور لا تستوفي شروط الأمان: 10 أحرف على الأقل، حرف كبير وحرف صغير ورقم ورمز خاص، وألا تحتوي الجزء الأول من بريدك الإلكتروني.", "The password does not meet the security rules: at least 10 characters, with an uppercase letter, a lowercase letter, a number and a special character, and it must not contain the first part of your e-mail address."],
   wrong_current_password: ["كلمة المرور الحالية غير صحيحة.", "The current password is incorrect."],
   password_change_required: ["كلمة المرور الحالية لا تستوفي شروط الأمان الجديدة. الرجاء تغييرها من الملف الشخصي للمتابعة.", "Your current password does not meet the new security rules. Please change it in your profile to continue."],
   current_password_required: ["أدخل كلمة المرور الحالية لتغيير كلمة المرور.", "Enter your current password to change the password."],
@@ -65,7 +67,7 @@ const MSG = {
   username_taken: ["اسم المستخدم هذا مستخدم بالفعل.", "This username is already taken."],
   employee_id_taken: ["الرقم الوظيفي مسجل لحساب آخر.", "This employee ID is registered to another account."],
   email_taken: ["البريد الإلكتروني مسجل لحساب آخر.", "This email is registered to another account."],
-  identifier_required: ["أدخل اسم المستخدم أو البريد الإلكتروني.", "Enter your username or email."],
+  identifier_required: ["أدخل بريدك الإلكتروني.", "Enter your e-mail address."],
   reset_invalid: ["انتهت صلاحية الرابط أو استُخدم مسبقاً. اطلب رابطاً جديداً.", "This link has expired or was already used. Request a new one."],
   user_not_found: ["المستخدم غير موجود.", "User not found."],
   employee_not_found: ["لا يوجد مستخدم بهذا الرقم الوظيفي.", "No user has this employee ID."],
@@ -488,7 +490,7 @@ function publicUser(u) {
     job_title: u.job_title,
     employee_id: u.employee_id,
     email: u.email,
-    hospital: u.hospital,
+    hospital: u.hospital || DEFAULT_HOSPITAL,
     created_at: u.created_at,
     mfa_enabled: !!u.totp_enabled,
     must_change_password: !!u.must_change_password,
@@ -609,6 +611,18 @@ async function createMfaChallenge(env, user, keepSignedIn) {
 
 const USERNAME_RE = /^[A-Za-z0-9._-]{3,32}$/;
 
+async function usernameFromEmail(env, email) {
+  let base = String(email).split("@")[0].replace(/[^A-Za-z0-9._-]/g, "").slice(0, 24);
+  if (base.length < 3) base = `user${base}`;
+  let candidate = base;
+  for (let i = 0; i < 20; i++) {
+    if (!(await env.DB.prepare("SELECT 1 FROM users WHERE lower(username) = lower(?)").bind(candidate).first())) return candidate;
+    const n = crypto.getRandomValues(new Uint16Array(1))[0] % 9000 + 1000;
+    candidate = `${base}-${n}`;
+  }
+  return `${base}-${newToken(6).replace(/[^A-Za-z0-9]/g, "").slice(0, 6)}`;
+}
+
 async function handleSignup(request, env) {
   await limitOrThrow(env, `signup:${clientIp(request)}`, 5, 3600);
   const body = await readJson(request);
@@ -617,20 +631,17 @@ async function handleSignup(request, env) {
   const fn = str(body.first_name, 60);
   const ln = str(body.last_name, 60);
   if (!fn || !ln) return err(400, "name_required");
-  const username = str(body.username, 40);
-  if (!USERNAME_RE.test(username)) return err(400, "username_invalid");
   const employeeId = str(body.employee_id, 30);
   if (!employeeId) return err(400, "employee_id_required");
   const email = str(body.email, 254);
   if (!isValidEmail(email)) return err(400, "email_invalid");
-  const hospital = str(body.hospital, 150);
-  if (!hospital) return err(400, "hospital_required");
-  const password = await readPassword(env, body, "password");
-  assertStrongPassword(password, username);
-
-  if (await env.DB.prepare("SELECT 1 FROM users WHERE lower(username) = lower(?)").bind(username).first()) return err(409, "username_taken");
+  const hospital = DEFAULT_HOSPITAL;
   if (await env.DB.prepare("SELECT 1 FROM users WHERE lower(trim(employee_id)) = lower(?)").bind(employeeId).first()) return err(409, "employee_id_taken");
   if (await env.DB.prepare("SELECT 1 FROM users WHERE lower(email) = lower(?)").bind(email).first()) return err(409, "email_taken");
+  // Sign-in is by e-mail; an internal username is made from the e-mail.
+  const username = await usernameFromEmail(env, email);
+  const password = await readPassword(env, body, "password");
+  assertStrongPassword(password, username);
 
   await env.DB.prepare(
     `INSERT INTO users (username, name, password_hash, role, department, specialty, job_title, employee_id, email, hospital, status)
@@ -650,7 +661,7 @@ async function handleLogin(request, env) {
   const body = await readJson(request);
   if (!body) return err(400, "bad_request");
   await verifyTurnstile(env, request, body.cf_turnstile);
-  const username = str(body.username, 64);
+  const username = str(body.email || body.username, 254);
   if (!username) return err(400, "invalid_credentials");
   const failKey = `login-fail:${username.toLowerCase()}`;
   if ((await peek(env, failKey, 900)) >= 5) {
@@ -658,7 +669,9 @@ async function handleLogin(request, env) {
     return err(429, "locked");
   }
   const password = await readPassword(env, body, "password");
-  const user = await env.DB.prepare("SELECT * FROM users WHERE lower(username) = lower(?)").bind(username).first();
+  const user = username.includes("@")
+    ? await env.DB.prepare("SELECT * FROM users WHERE lower(email) = lower(?)").bind(username).first()
+    : await env.DB.prepare("SELECT * FROM users WHERE lower(username) = lower(?)").bind(username).first();
   if (!user) {
     await dummyHash();
     await hit(env, failKey, 1000, 900);
@@ -783,7 +796,7 @@ async function handleProfile(request, env) {
     sets.push("employee_id = ?");
     values.push(emp);
   }
-  const limits = { department: 120, specialty: 120, job_title: 60, hospital: 150 };
+  const limits = { department: 120, specialty: 120, job_title: 60 };
   for (const key of Object.keys(limits)) {
     if (body[key] !== undefined) {
       sets.push(`${key} = ?`);
@@ -1199,10 +1212,10 @@ async function handleUsersPost(request, env) {
         html: `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.8">
           <p>مرحباً ${escapeHtml(before.name || username)}،</p>
           <p>تم اعتماد حسابك في <b>منصة التطوير المهني المستمر بالرعاية الأولية</b>.</p>
-          <p>يمكنك الآن تسجيل الدخول باسم المستخدم <b dir="ltr">${escapeHtml(username)}</b> ومتابعة المحاضرات:</p>
+          <p>يمكنك الآن تسجيل الدخول ببريدك الإلكتروني <b dir="ltr">${escapeHtml(before.email)}</b> وكلمة المرور ومتابعة المحاضرات:</p>
           <p><a href="${SITE_URL}">${SITE_URL}</a></p>
-          <p>عند أول دخول سيُطلب منك ربط تطبيق مصادقة (Google أو Microsoft Authenticator) للتحقق الثنائي.</p>
-          <hr><p dir="ltr" style="color:#64748b">Your account has been approved. At first sign-in you will be asked to link an authenticator app for two-factor authentication.</p></div>`,
+          ${mfaDisabled(env) ? "" : "<p>عند أول دخول سيُطلب منك ربط تطبيق مصادقة (Google أو Microsoft Authenticator) للتحقق الثنائي.</p>"}
+          <hr><p dir="ltr" style="color:#64748b">Your account has been approved. Sign in with your e-mail address and password.</p></div>`,
       });
     }
   }
@@ -2027,8 +2040,13 @@ async function handleCertificateEmail(request, env) {
   if (!c) return err(404, "cert_not_found");
   if (!caller.email) return err(400, "no_email");
   if (!env.RESEND_API_KEY) return err(503, "mail_disabled");
-  if (body.auto && c.emailed_at) return ok({ sent: false, already: true, email: caller.email });
-  await limitOrThrow(env, `certmail:${caller.username}`, 10, 86400);
+  if (body.auto) {
+    // Automatic send happens once per certificate: claim it atomically (two open tabs never send twice).
+    const claim = await env.DB.prepare("UPDATE certificates SET emailed_at = datetime('now') WHERE code = ? AND emailed_at IS NULL").bind(c.code).run();
+    if (!claim.meta || !claim.meta.changes) return ok({ sent: false, already: true, email: caller.email });
+  } else {
+    await limitOrThrow(env, `certmail:${caller.username}`, 10, 86400);
+  }
   let attachments;
   const b64 = typeof body.pdf === "string" ? body.pdf.replace(/^data:[^,]*,/, "") : "";
   if (b64) {
@@ -2037,7 +2055,10 @@ async function handleCertificateEmail(request, env) {
     attachments = [{ filename: `certificate-${c.code}.pdf`, content: b64 }];
   }
   const sent = await sendMail(env, { to: caller.email, subject: `شهادة حضور: ${c.lecture_title}`, html: certificateEmailHtml(c), attachments });
-  if (!sent) return err(502, "mail_failed");
+  if (!sent) {
+    if (body.auto) await env.DB.prepare("UPDATE certificates SET emailed_at = NULL WHERE code = ?").bind(c.code).run(); // retry next time
+    return err(502, "mail_failed");
+  }
   await env.DB.prepare("UPDATE certificates SET emailed_at = datetime('now') WHERE code = ?").bind(c.code).run();
   await audit(env, request, caller.username, "certificate_emailed", c.code);
   return ok({ sent: true, email: caller.email });
@@ -2057,7 +2078,7 @@ async function issueCertificate(env, user, lecture, attemptId, score, issuedAtDb
         `INSERT INTO certificates (code, username, lecture_id, attempt_id, score, holder_name, employee_id, hospital, lecture_title, program_name, lecturer_name, issued_at, valid_from, valid_until, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
       )
-        .bind(code, user.username, lecture.id, attemptId, score, user.name, user.employee_id || null, user.hospital || null, lecture.title, program ? program.name : null, lecture.lecturer_name || null,
+        .bind(code, user.username, lecture.id, attemptId, score, user.name, user.employee_id || null, user.hospital || DEFAULT_HOSPITAL, lecture.title, program ? program.name : null, lecture.lecturer_name || null,
           new Date(issuedMs).toISOString().replace("T", " ").slice(0, 19), validFrom, validUntil)
         .run();
       const row = await env.DB.prepare("SELECT * FROM certificates WHERE code = ?").bind(code).first();
@@ -2482,12 +2503,33 @@ const ROUTES = {
   "GET /api/tts/status": (r, env) => handleTtsStatus(env),
 };
 
+// One-time data fixes, applied once per database (tracked in app_settings).
+let migrationsDone = false;
+async function runMigrations(env) {
+  if (migrationsDone) return;
+  try {
+    if ((await getSetting(env, "migration_hospital_v1", "")) !== "done") {
+      await env.DB.prepare("UPDATE users SET hospital = ?").bind(DEFAULT_HOSPITAL).run();
+      try {
+        await env.DB.prepare("UPDATE certificates SET hospital = ?").bind(DEFAULT_HOSPITAL).run();
+      } catch (e) {
+        /* no certificates table yet */
+      }
+      await env.DB.prepare("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('migration_hospital_v1', 'done', datetime('now'))").run();
+    }
+    migrationsDone = true;
+  } catch (e) {
+    console.error("migration failed", e && e.stack ? e.stack : e); // never block requests
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), request);
     const { pathname } = new URL(request.url);
     const handler = ROUTES[`${request.method} ${pathname}`];
     try {
+      await runMigrations(env);
       const response = handler ? await handler(request, env) : err(404, "route_not_found");
       return withCors(response, request);
     } catch (e) {
